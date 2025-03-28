@@ -1,7 +1,7 @@
 import os
-import shutil
 import json
-from PIL import Image
+import shutil
+from datetime import datetime
 
 
 class AnnotationSaver:
@@ -14,28 +14,24 @@ class AnnotationSaver:
         os.makedirs(self.images_dir, exist_ok=True)
         os.makedirs(self.annotations_dir, exist_ok=True)
 
-    def save_annotation(self, original_path, rectangles):
-        """Сохраняет копию изображения и аннотацию"""
+    def save_annotation(self, original_path, regions):
         if not os.path.exists(original_path):
-            raise FileNotFoundError(f"Source image not found: {original_path}")
+            return
 
         img_name = os.path.basename(original_path)
         img_dst = os.path.join(self.images_dir, img_name)
 
-        try:
-            if not os.path.exists(img_dst):
-                shutil.copy2(original_path, img_dst)
-        except Exception as e:
-            raise RuntimeError(f"Failed to copy image: {e}")
+        if not os.path.exists(img_dst):
+            shutil.copy2(original_path, img_dst)
 
-        # Сохраняем аннотацию
         annotation = {
             "image": img_name,
-            "regions": rectangles
+            "timestamp": datetime.now().isoformat(),
+            "regions": regions
         }
 
         ann_name = f"{os.path.splitext(img_name)[0]}.json"
         ann_path = os.path.join(self.annotations_dir, ann_name)
 
-        with open(ann_path, 'w') as f:
-            json.dump(annotation, f, indent=2)
+        with open(ann_path, 'w', encoding='utf-8') as f:
+            json.dump(annotation, f, indent=2, ensure_ascii=False)
