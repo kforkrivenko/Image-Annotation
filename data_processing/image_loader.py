@@ -1,48 +1,44 @@
 import os
+from tkinter import messagebox
+
 from PIL import Image
 
 
 class ImageLoader:
-    def __init__(self, folder_path=""):
+    def __init__(self, folder_path):
         self.folder_path = folder_path
-        self.image_files = []
+        self.image_files = self._get_image_files()
         self.current_index = -1
 
-    def load_images(self):
-        if not self.image_files:
-            self.image_files = [
-                f for f in os.listdir(self.folder_path)
-                if f.lower().endswith(('.jpg', '.jpeg', '.png'))
-            ]
-            self.current_index = 0 if self.image_files else -1
+    def _get_image_files(self):
+        return [
+            f for f in os.listdir(self.folder_path)
+            if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+        ]
 
-    def get_current_image(self):
-        if 0 <= self.current_index < len(self.image_files):
-            return Image.open(os.path.join(
-                self.folder_path,
-                self.image_files[self.current_index]
-            ))
-        return None
+    def get_image(self, how):
+        if how == "next":
+            if self.current_index >= len(self.image_files):
+                return None, None
+            self.current_index += 1
+            image_path = os.path.join(self.folder_path, self.image_files[self.current_index])
+            return Image.open(image_path)
+        elif how == "prev":
+            if self.current_index <= 0:
+                return None, None
+            self.current_index -= 1
+            image_path = os.path.join(self.folder_path, self.image_files[self.current_index])
+            return Image.open(image_path)
+        elif how == "current":
+            if self.current_index == -1:
+                return None, None
+            image_path = os.path.join(self.folder_path, self.image_files[self.current_index])
+            return Image.open(image_path)
+        else:
+            messagebox.showerror("How Error", str(TypeError(f"No such how: {how}")))
 
-    def get_current_filename(self):
+    def get_current_image_path(self):
         if 0 <= self.current_index < len(self.image_files):
             return self.image_files[self.current_index]
+
         return None
-
-    def next_image(self):
-        if self.current_index < len(self.image_files) - 1:
-            self.current_index += 1
-            return True
-        return False
-
-    def prev_image(self):
-        if self.current_index > 0:
-            self.current_index -= 1
-            return True
-        return False
-
-    def has_next(self):
-        return self.current_index < len(self.image_files) - 1
-
-    def has_prev(self):
-        return self.current_index > 0

@@ -1,4 +1,11 @@
- .idea/
-*./__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
 annotated_dataset/
 annotation_dictionary.json
+annotations.json
