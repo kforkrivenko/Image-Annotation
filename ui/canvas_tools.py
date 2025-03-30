@@ -8,7 +8,7 @@ import json
 class CanvasTool:
     @log_method
     def __init__(self, parent):
-        self.canvas = tk.Canvas(parent, width=800, height=600, cursor="arrow")
+        self.canvas = tk.Canvas(parent, width=800, height=600, cursor="arrow", highlightthickness=0, bd=0)
         self.canvas.pack()
 
         self.image_on_canvas = None
@@ -31,7 +31,7 @@ class CanvasTool:
         self.clear_canvas()
         self.canvas.config(cursor='cross')
 
-        # Масштабирование изображения
+        # # Масштабирование изображения
         img_width, img_height = image.size
         ratio = min(800 / img_width, 600 / img_height)
         new_size = (int(img_width * ratio), int(img_height * ratio))
@@ -79,7 +79,7 @@ class CanvasTool:
             self.current_rect['coords'] = [self.start_x, self.start_y, event.x, event.y]
 
     @log_method
-    def _on_release(self, event):
+    def _on_release(self, _):
         if not self.current_rect:
             return
 
@@ -163,8 +163,14 @@ class CanvasTool:
 
     @log_method
     def clear_canvas(self):
+        self.image_on_canvas = None
         self.canvas.delete("all")
         self.rectangles = []
+
+    @log_method
+    def delete_canvas(self):
+        self.clear_canvas()
+        self.canvas.destroy()
 
     @log_method
     def add_rectangle(self, coords, text):

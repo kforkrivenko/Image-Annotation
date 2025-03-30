@@ -1,20 +1,21 @@
 import os
 import json
 import shutil
-from datetime import datetime
+from utils.annotations_manager import JsonManager
 
 
 class AnnotationSaver:
-    def __init__(self):
+    def __init__(self, folder_path):
         self.output_dir = "annotated_dataset"
         os.makedirs(self.output_dir, exist_ok=True)
 
         self.images_dir = os.path.join(self.output_dir, "images")
-        self.annotations_dir = os.path.join(self.output_dir, "annotations")
         os.makedirs(self.images_dir, exist_ok=True)
-        os.makedirs(self.annotations_dir, exist_ok=True)
+        self.folder_path = folder_path
 
-        self.annotation_file = 'annotations.json'
+        self.json_manager = JsonManager(
+            os.path.join(self.output_dir, 'annotations.json')
+        )
 
     def save_annotation(self, original_path, annotations):
         if not os.path.exists(original_path):
@@ -26,17 +27,20 @@ class AnnotationSaver:
         if not os.path.exists(img_dst):
             shutil.copy2(original_path, img_dst)
 
-        # Проверяем, есть ли уже запись.
-        try:
-            with open(self.annotation_file, 'r') as f:
-                data = json.load(f)
-        except Exception:
-            data = {}
-
-        # Если есть, то удаляем
-        if img_name in data:
-            del data[img_name]
-
+        # # Проверяем, есть ли уже запись.
+        # try:
+        #     with open(self.annotation_file, 'r') as f:
+        #         data = json.load(f)
+        # except Exception:
+        #     data = {
+        #         self.folder_path: {}
+        #     }
+        #
+        # # Если есть, то удаляем
+        # if self.folder_path in data:
+        #     if img_name in data[self.folder_path]:
+        #         del data[self.folder_path][img_name]
+        #
         annotations_undouble = []
 
         for annotation in annotations:
@@ -48,29 +52,39 @@ class AnnotationSaver:
                     }
                 )
 
-        data[img_name] = annotations_undouble
+        # if self.folder_path not in data:
+        #     data[self.folder_path] = {}
+        # data[self.folder_path][img_name] = annotations_undouble
+        #
+        # with open(self.annotation_file, 'w', encoding='utf-8') as f:
+        #     json.dump(data, f, indent=2)
 
-        print("DATA", annotations_undouble)
+        self.json_manager.delete_file(
+            self.folder_path,
+            img_name
+        )
 
-        with open(self.annotation_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2)
+        self.json_manager.add_file_info(
+            self.folder_path,
+            img_name,
+            annotations_undouble
+        )
 
     def get_annotation_from_file(self, original_path):
-        if not os.path.exists(original_path):
-            print("No original path", original_path)
-            return []
-
         img_name = os.path.basename(original_path)
 
-        try:
-            with open(self.annotation_file, 'r') as f:
-                data = json.load(f)
-        except Exception:
-            data = {}
+        # try:
+        #     with open(self.annotation_file, 'r') as f:
+        #         data = json.load(f)
+        # except Exception:
+        #     data = {}
+        #
+        # print(data, img_name)
+        # if self.folder_path in data:
+        #     if img_name in data[self.folder_path]:
+        #         return data[self.folder_path][img_name]
+        #
+        # return []
 
-        print(data, img_name)
-        if img_name in data:
-            return data[img_name]
-
-        return []
+        return self.json_manager.get_file_info(self.folder_path, img_name)
 

@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import simpledialog, filedialog, messagebox
+from tkinter import filedialog, messagebox
 from data_processing.image_loader import ImageLoader
 from data_processing.annotation_saver import AnnotationSaver
 from ui.canvas_tools import CanvasTool
@@ -14,7 +14,7 @@ class MainWindow:
         # Инициализация компонентов
         self.canvas_tool = CanvasTool(self.root)
         self.image_loader = None
-        self.annotation_saver = AnnotationSaver()
+        self.annotation_saver = None
 
         # UI элементы
         self._setup_ui()
@@ -51,12 +51,41 @@ class MainWindow:
         )
         self.next_btn.pack(side=tk.LEFT, padx=5)
 
+        self.btn_frame_close = tk.Frame(self.root)
+        self.btn_frame_close.pack(pady=10)
+
+        self.close_image = tk.Button(
+            self.btn_frame,
+            text="Close",
+            command=self._clear_canvas,
+            state=tk.NORMAL
+        )
+
+        self.close_image.pack(side=tk.RIGHT, padx=5)
+
+        nav_frame = tk.Frame(self.root)
+        nav_frame.pack(pady=5)
+
+        self.progress_var = tk.StringVar()
+        tk.Label(
+            nav_frame,
+            textvariable=self.progress_var
+        ).pack(side=tk.LEFT, padx=10)
+
+    def _clear_canvas(self):
+        self.canvas_tool.clear_canvas()
+        self.prev_btn.config(state=tk.DISABLED)
+        self.next_btn.config(state=tk.DISABLED)
+        self.canvas_tool.canvas.config(cursor='')
+
     def _load_folder(self):
         folder_path = filedialog.askdirectory()
         if not folder_path:
             return
 
         self.image_loader = ImageLoader(folder_path)
+        self.annotation_saver = AnnotationSaver(folder_path)
+        self.folder_path = folder_path
         if not self.image_loader.image_files:
             messagebox.showerror("Error", "No images found in selected folder!")
             return
@@ -64,6 +93,10 @@ class MainWindow:
         self._load_image(how='next')
         self._draw_current_image()
         self._update_button_state()
+        current_annotations_from_file = self.annotation_saver.get_annotation_from_file(
+            self.image_path
+        )
+        self._draw_annotations_from_file(current_annotations_from_file)
 
     def _load_image(self, how):
         self.image = self.image_loader.get_image(how=how)
@@ -85,8 +118,6 @@ class MainWindow:
         for annotation in annotations_from_file:
             coords = annotation['coords']
             label = annotation['text']
-            print("coords", *coords)
-            print("label", label)
             self.canvas_tool.add_rectangle(
                 coords,
                 label
@@ -106,33 +137,37 @@ class MainWindow:
             return
 
         self._update_button_state()
-        try:
-            current_annotations = self.canvas_tool.get_annotations()
-            current_image_path = os.path.join(
-                self.image_loader.folder_path,
-                self.image_loader.get_current_image_path()
-            )
-            #  Пытаемся подгрузить аннотации
-            current_annotations_from_file = self.annotation_saver.get_annotation_from_file(current_image_path)
-            self._load_image("next")
 
-            next_image_path = os.path.join(
-                self.image_loader.folder_path,
-                self.image_loader.get_current_image_path()
-            )
-            next_annotations_from_file = self.annotation_saver.get_annotation_from_file(next_image_path)
-            #  Убираем предыдущие творения
-            self.canvas_tool.clear_canvas()
-            #  Рисуем Картинку
-            self._draw_current_image()
-            #  Отображаем их
-            self._draw_annotations_from_file(next_annotations_from_file)
-            #  Сохраняем аннотации
-            print("Next annotations from file:", next_annotations_from_file)
-            print("Current annotations", current_annotations)
+        current_annotations = self.canvas_tool.get_annotations()
+        current_image_path = os.path.join(
+            self.image_loader.folder_path,
+            self.image_loader.get_current_image_path()
+        )
+        #  Пытаемся подгрузить аннотации
+        current_annotations_from_file = self.annotation_saver.get_annotation_from_file(current_image_path)
+        self._load_image("next")
+
+        next_image_path = os.path.join(
+            self.image_loader.folder_path,
+            self.image_loader.get_current_image_path()
+        )
+        next_annotations_from_file = self.annotation_saver.get_annotation_from_file(next_image_path)
+        #  Убираем предыдущие творения
+        self.canvas_tool.clear_canvas()
+        #  Рисуем Картинку
+        self._draw_current_image()
+        #  Отображаем их
+        self._draw_annotations_from_file(next_annotations_from_file)
+        #  Сохраняем аннотации
+
+        print('current_annotations', current_annotations)
+        print('current_annotations_from_file', current_annotations_from_file)
+
+        try:
             if current_annotations:
                 self.annotation_saver.save_annotation(
-                    current_image_path, current_annotations + current_annotations_from_file
+                    current_image_path,
+                    current_annotations + current_annotations_from_file
                 )
         except Exception as e:
             messagebox.showerror("Save Error", f"Failed to save annotation: {str(e)}")
@@ -143,30 +178,30 @@ class MainWindow:
             return
 
         self._update_button_state()
-        try:
-            current_annotations = self.canvas_tool.get_annotations()
-            current_image_path = os.path.join(
-                self.image_loader.folder_path,
-                self.image_loader.get_current_image_path()
-            )
-            #  Пытаемся подгрузить аннотации
-            current_annotations_from_file = self.annotation_saver.get_annotation_from_file(current_image_path)
-            self._load_image("prev")
 
-            prev_image_path = os.path.join(
-                self.image_loader.folder_path,
-                self.image_loader.get_current_image_path()
-            )
-            prev_annotations_from_file = self.annotation_saver.get_annotation_from_file(prev_image_path)
-            #  Убираем предыдущие творения
-            self.canvas_tool.clear_canvas()
-            #  Рисуем Картинку
-            self._draw_current_image()
-            #  Отображаем их
-            self._draw_annotations_from_file(prev_annotations_from_file)
+        current_annotations = self.canvas_tool.get_annotations()
+        current_image_path = os.path.join(
+            self.image_loader.folder_path,
+            self.image_loader.get_current_image_path()
+        )
+        #  Пытаемся подгрузить аннотации
+        current_annotations_from_file = self.annotation_saver.get_annotation_from_file(current_image_path)
+        self._load_image("prev")
+
+        prev_image_path = os.path.join(
+            self.image_loader.folder_path,
+            self.image_loader.get_current_image_path()
+        )
+        prev_annotations_from_file = self.annotation_saver.get_annotation_from_file(prev_image_path)
+        #  Убираем предыдущие творения
+        self.canvas_tool.clear_canvas()
+        #  Рисуем Картинку
+        self._draw_current_image()
+        #  Отображаем их
+        self._draw_annotations_from_file(prev_annotations_from_file)
+
+        try:
             #  Сохраняем аннотации
-            print("Current annotations from file:", current_annotations_from_file)
-            print("Prev annotations from file:", prev_annotations_from_file)
             if current_annotations:
                 self.annotation_saver.save_annotation(
                     current_image_path,
@@ -185,3 +220,7 @@ class MainWindow:
             self.next_btn.config(state=tk.NORMAL)
         else:
             self.next_btn.config(state=tk.DISABLED)
+
+        self.progress_var.set(
+            f"{self.image_loader.current_index + 1}/{len(self.image_loader.image_files)}"
+        )

@@ -1,5 +1,4 @@
 import tkinter as tk
-from tkinter import filedialog
 from ui.main_window import MainWindow
 
 
