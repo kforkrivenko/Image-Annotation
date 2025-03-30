@@ -1,8 +1,5 @@
-import tkinter as tk
-from ui.main_window import MainWindow
-
+from ui.app import ImageAnnotationApp
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = MainWindow(root)
-    root.mainloop()
+    app = ImageAnnotationApp()
+    app.run()
