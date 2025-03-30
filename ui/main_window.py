@@ -164,11 +164,10 @@ class MainWindow:
         print('current_annotations_from_file', current_annotations_from_file)
 
         try:
-            if current_annotations:
-                self.annotation_saver.save_annotation(
-                    current_image_path,
-                    current_annotations + current_annotations_from_file
-                )
+            self.annotation_saver.save_annotation(
+                current_image_path,
+                current_annotations + current_annotations_from_file
+            )
         except Exception as e:
             messagebox.showerror("Save Error", f"Failed to save annotation: {str(e)}")
 
@@ -202,11 +201,10 @@ class MainWindow:
 
         try:
             #  Сохраняем аннотации
-            if current_annotations:
-                self.annotation_saver.save_annotation(
-                    current_image_path,
-                    current_annotations + current_annotations_from_file
-                )
+            self.annotation_saver.save_annotation(
+                current_image_path,
+                current_annotations + current_annotations_from_file
+            )
         except Exception as e:
             messagebox.showerror("Save Error", f"Failed to save annotation: {str(e)}")
 

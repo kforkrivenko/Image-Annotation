@@ -23,7 +23,7 @@ class JsonManager:
     def _save(self):
         """Сохраняет данные в JSON-файл."""
         with open(self.file_path, "w", encoding="utf-8") as file:
-            json.dump(self.data, file, indent=4, ensure_ascii=False)
+            json.dump(self.data, file, indent=4)
 
     def __getitem__(self, key: str) -> Dict[str, List[Any]]:
         """Получить словарь файлов папки: `files = manager['папка']`."""

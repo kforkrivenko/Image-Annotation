@@ -7,7 +7,7 @@ import json
 
 class CanvasTool:
     @log_method
-    def __init__(self, parent):
+    def __init__(self, parent, ):
         self.canvas = tk.Canvas(parent, width=800, height=600, cursor="arrow", highlightthickness=0, bd=0)
         self.canvas.pack()
 
@@ -19,6 +19,7 @@ class CanvasTool:
         self.start_x = None
         self.start_y = None
         self.tk_image = None
+        self.ratio = None
 
         # Привязка событий
         self.canvas.bind("<ButtonPress-1>", self._on_press)
@@ -36,6 +37,8 @@ class CanvasTool:
         ratio = min(800 / img_width, 600 / img_height)
         new_size = (int(img_width * ratio), int(img_height * ratio))
         image = image.resize(new_size, Image.Resampling.LANCZOS)
+
+        self.ratio = ratio
 
         # Отображение
         self.tk_image = ImageTk.PhotoImage(image)
@@ -65,7 +68,8 @@ class CanvasTool:
                 outline='red', width=2
             ),
             'text': None,
-            'coords': [event.x, event.y, event.x, event.y]
+            'coords': [event.x, event.y, event.x, event.y],
+            'ratio': self.ratio
         }
 
     @log_method
@@ -96,7 +100,8 @@ class CanvasTool:
             rect_data = {
                 'rect': self.current_rect['rect'],
                 'text': label,
-                'coords': self.current_rect['coords']
+                'coords': self.current_rect['coords'],
+                'ratio': self.ratio
             }
             self.rectangles.append(rect_data)
 
@@ -180,7 +185,8 @@ class CanvasTool:
                 outline='red', width=2
             ),
             'text': text,
-            'coords': [*coords]
+            'coords': [*coords],
+            'ratio': self.ratio
         }
 
         self.rectangles.append(rect)

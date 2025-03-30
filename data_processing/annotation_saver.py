@@ -27,37 +27,17 @@ class AnnotationSaver:
         if not os.path.exists(img_dst):
             shutil.copy2(original_path, img_dst)
 
-        # # Проверяем, есть ли уже запись.
-        # try:
-        #     with open(self.annotation_file, 'r') as f:
-        #         data = json.load(f)
-        # except Exception:
-        #     data = {
-        #         self.folder_path: {}
-        #     }
-        #
-        # # Если есть, то удаляем
-        # if self.folder_path in data:
-        #     if img_name in data[self.folder_path]:
-        #         del data[self.folder_path][img_name]
-        #
         annotations_undouble = []
 
+        # Дедубликация аннотаций
         for annotation in annotations:
-            if annotation not in annotations_undouble:
-                annotations_undouble.append(
-                    {
-                        'text': annotation['text'],
-                        'coords': annotation['coords']
-                    }
-                )
-
-        # if self.folder_path not in data:
-        #     data[self.folder_path] = {}
-        # data[self.folder_path][img_name] = annotations_undouble
-        #
-        # with open(self.annotation_file, 'w', encoding='utf-8') as f:
-        #     json.dump(data, f, indent=2)
+            annotation_jsoned = {
+                'text': annotation['text'],
+                'coords': annotation['coords'],
+                'ratio': annotation['ratio']
+            }
+            if annotation_jsoned not in annotations_undouble:
+                annotations_undouble.append(annotation_jsoned)
 
         self.json_manager.delete_file(
             self.folder_path,
@@ -72,19 +52,6 @@ class AnnotationSaver:
 
     def get_annotation_from_file(self, original_path):
         img_name = os.path.basename(original_path)
-
-        # try:
-        #     with open(self.annotation_file, 'r') as f:
-        #         data = json.load(f)
-        # except Exception:
-        #     data = {}
-        #
-        # print(data, img_name)
-        # if self.folder_path in data:
-        #     if img_name in data[self.folder_path]:
-        #         return data[self.folder_path][img_name]
-        #
-        # return []
 
         return self.json_manager.get_file_info(self.folder_path, img_name)
 
