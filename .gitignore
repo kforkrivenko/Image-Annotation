@@ -10,4 +10,8 @@ venv/
 annotated_dataset/
 annotation_dictionary.json
 annotations.json
+dataset_history.json
 .idea/
+dist/
+build/
+.DS_Store

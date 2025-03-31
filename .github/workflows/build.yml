@@ -1,0 +1,32 @@
+name: Build via SPEC
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build with SPEC
+        run: |
+          pyinstaller build_mac.spec
+          ls -R dist  # Проверка содержимого
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: application
+          path: |
+            dist/main.exe
+            dist/main/*  # Если используется onefile=False

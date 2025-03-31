@@ -14,6 +14,7 @@ class AnnotationCanvas(tk.Canvas):
         self.current_rect = None
         self.image_on_canvas = None
         self.tk_image = None
+        self.image_path = None
         self.annotations = []
         self.ratio = 1.0
 
@@ -25,6 +26,7 @@ class AnnotationCanvas(tk.Canvas):
         )
         self.image_on_canvas = None
         self.tk_image = None
+        self.image_path = None
         self.ratio = 1.0
         self.annotations = []
         self._bind_events()
@@ -34,11 +36,105 @@ class AnnotationCanvas(tk.Canvas):
         self.bind("<B1-Motion>", self._on_drag)
         self.bind("<ButtonRelease-1>", self._on_release)
 
+        # Правая кнопка - контекстное меню
+        self.bind("<ButtonPress-3>", self._on_right_click)  # Windows/Linux
+        self.bind("<ButtonPress-2>", self._on_right_click)  # MacOS
+
+    def _on_right_click(self, event):
+        """Обработчик правой кнопки мыши"""
+        # Создаем контекстное меню
+        menu = tk.Menu(self, tearoff=0)
+
+        # Добавляем команды
+        menu.add_command(
+            label="Удалить аннотацию",
+            command=lambda: self._delete_annotation_near(event.x, event.y)
+        )
+        menu.add_command(
+            label="Изменить метку",
+            command=lambda: self._edit_annotation_label(event.x, event.y)
+        )
+
+        # Показываем меню
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _delete_annotation_near(self, x, y):
+        """Удаляет ближайшую аннотацию"""
+        for i, ann in enumerate(self.annotations):
+            x1, y1, x2, y2 = ann.coords
+            if x1 <= x <= x2 and y1 <= y <= y2:
+                self.delete(ann.rect)
+                self.delete(ann.text_id)
+                self.annotations.pop(i)
+
+                self.configure(bg=self.cget("bg"))
+                self._redraw_all_annotations()
+                break
+
+    def _edit_annotation_label(self, x, y):
+        """Изменяет метку аннотации"""
+        for ann in self.annotations:
+            x1, y1, x2, y2 = ann.coords
+            if x1 <= x <= x2 and y1 <= y <= y2:
+                new_label = simpledialog.askstring("Изменить метку",
+                                                   "Новая метка:",
+                                                   initialvalue=ann.text)
+                if new_label:
+                    ann.text = new_label
+                    self._update_annotation_display(ann)
+
+                self._redraw_all_annotations()
+                break
+
+    def _update_annotation_display(self, annotation):
+        """Обновляет визуальное отображение аннотации на Canvas"""
+        # 1. Удаляем старые элементы
+        self.delete(annotation.rect)  # Удаляем прямоугольник
+        if hasattr(annotation, 'text_id'):
+            self.delete(annotation.text_id)  # Удаляем старую текстовую метку
+
+        # 2. Пересчитываем координаты с учетом текущего масштаба
+        ratio = self.ratio if hasattr(self, 'ratio') else 1.0
+        coords = [
+            annotation.coords[0] * ratio,
+            annotation.coords[1] * ratio,
+            annotation.coords[2] * ratio,
+            annotation.coords[3] * ratio
+        ]
+
+        # 3. Перерисовываем прямоугольник
+        annotation.rect = self.create_rectangle(
+            *coords,
+            outline='red',
+            width=2
+        )
+
+        # 4. Перерисовываем текстовую метку
+        x_center = (coords[0] + coords[2]) / 2
+        y_center = (coords[1] + coords[3]) / 2
+
+        annotation.text_id = self.create_text(
+            x_center, y_center,
+            text=annotation.text,
+            fill='red',
+            font=('Arial', 10, 'bold')
+        )
+
+        # 5. Обновляем ссылки в списке аннотаций
+        for i, ann in enumerate(self.annotations):
+            if ann == annotation:
+                self.annotations[i] = annotation
+                break
+
     def display_image(self, image, image_path):
         self.clear()  # Сначала очищаем canvas
         self.configure(cursor="cross")
         self._draw_image(image)
         self._draw_image_path(image_path)
+        self.image_path = image_path
 
     def _draw_image(self, image):
         img_width, img_height = image.size
@@ -82,17 +178,17 @@ class AnnotationCanvas(tk.Canvas):
         label = simpledialog.askstring("Label", "Enter object label:", parent=self)
 
         if label:
-            self._create_annotation(coords, label)
+            self._create_annotation(coords, label, self.current_rect)
         else:
             self.delete(self.current_rect)
 
         self.current_rect = None
 
-    def _create_annotation(self, coords, label):
+    def _create_annotation(self, coords, label, rect):
         x_center = (coords[0] + coords[2]) / 2
         y_center = (coords[1] + coords[3]) / 2
 
-        self.create_text(
+        text_id = self.create_text(
             x_center, y_center,
             text=label, fill="red",
             font=("Arial", 10, "bold")
@@ -101,7 +197,9 @@ class AnnotationCanvas(tk.Canvas):
         annotation = Annotation(
             coords=coords,
             text=label,
-            ratio=self.ratio
+            ratio=self.ratio,
+            rect=rect,
+            text_id=text_id
         )
         self.annotations.append(annotation)
 
@@ -130,7 +228,31 @@ class AnnotationCanvas(tk.Canvas):
         self.delete("all")  # Удаляем все элементы с canvas
         self.image_on_canvas = None
         self.tk_image = None
+        self.image_path = None
         self.annotations = []  # Очищаем список аннотаций
         self.ratio = 1.0
         self.current_rect = None
         self.configure(cursor="arrow")
+
+    def _redraw_all_annotations(self):
+        """Полная перерисовка всех элементов"""
+        # 1. Сохраняем текущее изображение
+        current_image = self.tk_image
+        current_image_path = self.image_path
+
+        # 2. Полностью очищаем Canvas
+        self.delete("all")
+
+        # 3. Восстанавливаем изображение (если было)
+        if current_image:
+            self.image_on_canvas = self.create_image(0, 0, anchor=tk.NW, image=current_image)
+            self._draw_image_path(current_image_path)
+
+        # 4. Перерисовываем все аннотации
+        for ann in self.annotations:
+            ann.rect = self.create_rectangle(*ann.coords, outline="red", width=2)
+            x_center = (ann.coords[0] + ann.coords[2]) / 2
+            y_center = (ann.coords[1] + ann.coords[3]) / 2
+            ann.text_id = self.create_text(x_center, y_center,
+                                           text=ann.text, fill="red",
+                                           font=("Arial", 10, "bold"))
