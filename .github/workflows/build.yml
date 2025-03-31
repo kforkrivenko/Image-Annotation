@@ -56,5 +56,5 @@ jobs:
         with:
           name: macos-application
           path: |
-            dist/ImageAnnotationTool
-            dist/ImageAnnotationTool/*
+            dist/ImageAnnotation.app
+            dist/ImageAnnotation.app/*
