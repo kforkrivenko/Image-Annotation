@@ -20,7 +20,7 @@ jobs:
 
       - name: Build with SPEC
         run: |
-          pyinstaller build_mac.spec
+          pyinstaller build_windows.spec
           ls -R dist  # Проверка содержимого
 
       - name: Upload artifact
