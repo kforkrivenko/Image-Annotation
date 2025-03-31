@@ -2,22 +2,32 @@
 from PyInstaller.utils.hooks import collect_data_files
 import os
 
-block_cipher = None
+# Получаем все зависимости для модулей
+datas, binaries, hiddenimports = collect_all('utils')
+datas += collect_all('ui')[0]
+datas += collect_all('models')[0]
+datas += collect_all('logger')[0]
+datas += collect_all('data_processing')[0]
+
+# Добавляем статические файлы
+datas += [
+    ('favicons/favicon.icns', 'favicons'),
+    ('favicons/favicon.ico', 'favicons')
+]
+
+# Исключаем динамические данные
+excludes = ['annotated_dataset']
 
 a = Analysis(
     ['main.py'],
     pathex=[os.getcwd()],
-    binaries=[],
-    datas=[
-        *collect_data_files('PIL'),
-        ('favicons/favicon.ico', 'favicons'),
-        ('ui/*.ui', 'ui'),  # Если используете Qt Designer
-        ('data_processing/*.py', 'data_processing')
-    ],
-    hiddenimports=['tkinter', 'PIL'],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=['annotated_dataset'],  # Исключаем пользовательские данные
+    excludes=excludes,
+    noarchive=False
 )
 
 exe = EXE(
