@@ -28,5 +28,5 @@ jobs:
         with:
           name: application
           path: |
-            ist/ImageAnnotationTool.exe
+            dist/ImageAnnotationTool.exe
             dist/ImageAnnotationTool/*
