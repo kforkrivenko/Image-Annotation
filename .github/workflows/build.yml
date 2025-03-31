@@ -3,7 +3,7 @@ name: Build via SPEC
 on: [push, workflow_dispatch]
 
 jobs:
-  build:
+  build_windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,15 +18,43 @@ jobs:
           pip install pyinstaller
           pip install -r requirements.txt
 
-      - name: Build with SPEC
+      - name: Build with SPEC (Windows)
         run: |
           pyinstaller build_windows.spec
           ls -R dist  # Проверка содержимого
 
-      - name: Upload artifact
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: application
+          name: windows-application
           path: |
             dist/ImageAnnotationTool.exe
+            dist/ImageAnnotationTool/*
+
+  build_mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build with SPEC (macOS)
+        run: |
+          pyinstaller build_mac.spec
+          ls -R dist  # Проверка содержимого
+
+      - name: Upload Mac artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-application
+          path: |
+            dist/ImageAnnotationTool
             dist/ImageAnnotationTool/*
