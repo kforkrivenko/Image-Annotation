@@ -7,8 +7,10 @@ from utils.logger import log_method
 
 class AnnotationCanvas(tk.Canvas):
     @log_method
-    def __init__(self, parent, **kwargs):
+    def __init__(self, parent, image_loader, annotation_saver, **kwargs):
         super().__init__(parent, width=800, height=600, **kwargs)
+        self.annotation_saver = annotation_saver
+        self.image_loader = image_loader
         self._setup_canvas()
 
         self.current_rect = None
@@ -17,18 +19,15 @@ class AnnotationCanvas(tk.Canvas):
         self.image_path = None
         self.annotations = []
         self.ratio = 1.0
+        self.default_label = None
 
     def _setup_canvas(self):
-        self.configure(
-            cursor="arrow",
-            highlightthickness=0,
-            bd=0
-        )
-        self.image_on_canvas = None
-        self.tk_image = None
-        self.image_path = None
-        self.ratio = 1.0
+        self.configure(bg="white", cursor="cross")
+        self.current_rect = None
         self.annotations = []
+        self.ratio = 1.0
+
+        # Привязка событий
         self._bind_events()
 
     def _bind_events(self):
@@ -71,8 +70,18 @@ class AnnotationCanvas(tk.Canvas):
                 self.annotations.pop(i)
 
                 self.configure(bg=self.cget("bg"))
+                self._delete_annotation_from_file(ann)
+
                 self._redraw_all_annotations()
                 break
+
+    def _delete_annotation_from_file(self, annotation):
+        folder_path, image_path = self.image_loader.folder_path, self.image_loader.get_current_image_path()
+        self.annotation_saver.delete_annotation_from_file(image_path, annotation)
+
+    def _add_annotation_to_file(self, annotation):
+        folder_path, image_path = self.image_loader.folder_path, self.image_loader.get_current_image_path()
+        self.annotation_saver.add_annotation_to_file(image_path, annotation)
 
     def _edit_annotation_label(self, x, y):
         """Изменяет метку аннотации"""
@@ -95,6 +104,7 @@ class AnnotationCanvas(tk.Canvas):
         self.delete(annotation.rect)  # Удаляем прямоугольник
         if hasattr(annotation, 'text_id'):
             self.delete(annotation.text_id)  # Удаляем старую текстовую метку
+            self._delete_annotation_from_file(annotation)
 
         # 2. Пересчитываем координаты с учетом текущего масштаба
         ratio = self.ratio if hasattr(self, 'ratio') else 1.0
@@ -129,12 +139,12 @@ class AnnotationCanvas(tk.Canvas):
                 self.annotations[i] = annotation
                 break
 
+        self._add_annotation_to_file(annotation)
+
     def display_image(self, image, image_path):
-        self.clear()  # Сначала очищаем canvas
-        self.configure(cursor="cross")
+        self.clear()
         self._draw_image(image)
         self._draw_image_path(image_path)
-        self.image_path = image_path
 
     def _draw_image(self, image):
         img_width, img_height = image.size
@@ -143,7 +153,7 @@ class AnnotationCanvas(tk.Canvas):
         resized_image = image.resize(new_size, Image.Resampling.LANCZOS)
 
         self.tk_image = ImageTk.PhotoImage(resized_image)
-        self.image_on_canvas = self.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
+        self.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
 
     def _draw_image_path(self, image_path):
         self.create_text(
@@ -175,7 +185,10 @@ class AnnotationCanvas(tk.Canvas):
             return
 
         coords = self.coords(self.current_rect)
-        label = simpledialog.askstring("Label", "Enter object label:", parent=self)
+        if self.default_label is not None:
+            label = self.default_label
+        else:
+            label = simpledialog.askstring("Label", "Enter object label:", parent=self)
 
         if label:
             self._create_annotation(coords, label, self.current_rect)
@@ -202,20 +215,34 @@ class AnnotationCanvas(tk.Canvas):
             text_id=text_id
         )
         self.annotations.append(annotation)
+        self._add_annotation_to_file(annotation)
 
     def add_annotation(self, annotation):
+        if annotation in self.annotations:
+            return
+
+        coords, label, rect = annotation.coords, annotation.text, annotation.rect
+
         rect = self.create_rectangle(
-            *annotation.coords,
+            *coords,
             outline="red", width=2
         )
 
-        x_center = (annotation.coords[0] + annotation.coords[2]) / 2
-        y_center = (annotation.coords[1] + annotation.coords[3]) / 2
+        x_center = (coords[0] + coords[2]) / 2
+        y_center = (coords[1] + coords[3]) / 2
 
-        self.create_text(
+        text_id = self.create_text(
             x_center, y_center,
-            text=annotation.text, fill="red",
+            text=label, fill="red",
             font=("Arial", 10, "bold")
+        )
+
+        _ = Annotation(
+            coords=coords,
+            text=label,
+            ratio=self.ratio,
+            rect=rect,
+            text_id=text_id
         )
 
         self.annotations.append(annotation)
@@ -256,3 +283,9 @@ class AnnotationCanvas(tk.Canvas):
             ann.text_id = self.create_text(x_center, y_center,
                                            text=ann.text, fill="red",
                                            font=("Arial", 10, "bold"))
+
+    def set_default_label(self, label):
+        if label.strip() != '':
+            self.default_label = label.strip()
+        else:
+            self.default_label = None

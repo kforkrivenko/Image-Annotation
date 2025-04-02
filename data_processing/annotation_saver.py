@@ -1,10 +1,7 @@
-import sys
-from utils.paths import DATA_DIR, BASE_DIR
+from utils.json_manager import JsonManager
 from .history_manager import DatasetHistoryManager
-import json
 import shutil
-from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict
 from models.annotation import Annotation
 from utils.paths import *
 
@@ -16,13 +13,18 @@ class AnnotationSaver:
 
         # Выбираем куда сохранять в зависимости от режима
         if getattr(sys, 'frozen', False):
-            self.output_dir = DATA_DIR / "annotated_datasets"
+            self.output_dir = DATA_DIR / "annotated_dataset"
         else:
             self.output_dir = BASE_DIR / "annotated_dataset"
 
         self.output_dir.mkdir(exist_ok=True)
         self.output_dir_images = self.output_dir / "images"
         self.output_dir_images.mkdir(exist_ok=True)
+
+        self.json_manager = JsonManager(
+            os.path.join(self.output_dir, 'annotations.json')
+        )
+
         self.annotations_file = self.output_dir / "annotations.json"
 
     def save_annotations(self, image_path: str, annotations: List[Annotation]):
@@ -33,13 +35,17 @@ class AnnotationSaver:
         self._copy_image_to_output(full_image_path)
 
         annotations_data = [ann.to_dict() for ann in annotations]
-        all_annotations = self._load_all_annotations()
 
-        # Сохраняем с полным путем к папке для уникальности
-        all_annotations.setdefault(str(self.source_folder), {})[img_name] = annotations_data
+        self.json_manager.delete_file(
+            str(self.source_folder),
+            img_name
+        )
 
-        with open(self.annotations_file, 'w') as f:
-            json.dump(all_annotations, f, indent=4)
+        self.json_manager.add_file_info(
+            str(self.source_folder),
+            img_name,
+            annotations_data
+        )
 
         self.history_manager.add_dataset(
             dataset_path=str(self.source_folder),
@@ -57,13 +63,13 @@ class AnnotationSaver:
 
     def get_annotations(self, image_path: str) -> List[Annotation]:
         img_name = Path(image_path).name
-        all_annotations = self._load_all_annotations()
-        annotations_data = all_annotations.get(str(self.source_folder), {}).get(img_name, [])
-        return [Annotation.from_dict(ann) for ann in annotations_data]
+        return [
+            Annotation.from_dict(annotation_dict)
+            for annotation_dict in self.json_manager.get_file_info(str(self.source_folder), img_name)
+        ]
 
-    def _load_all_annotations(self):
-        if not self.annotations_file.exists():
-            return {}
+    def delete_annotation_from_file(self, image_path: str, annotation: Annotation) -> None:
+        self.json_manager.delete_annotation(str(self.source_folder), image_path, annotation.to_dict())
 
-        with open(self.annotations_file, 'r') as f:
-            return json.load(f)
+    def add_annotation_to_file(self, image_path: str, annotation: Annotation) -> None:
+        self.json_manager.add_file_info(str(self.source_folder), image_path, [annotation.to_dict()])

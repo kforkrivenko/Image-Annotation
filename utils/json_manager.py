@@ -45,6 +45,10 @@ class JsonManager:
         """Получить информацию о файле: `info = manager.get_file_info('папка', 'файл')`."""
         return self.data.get(folder, {}).get(file, [])
 
+    def get_folder_info(self, folder: str) -> Dict[str, List[Any]]:
+        """Получить информацию о файле: `info = manager.get_file_info('папка', 'файл')`."""
+        return self.data.get(folder, {})
+
     def __delitem__(self, key: str):
         """Удалить папку: `del manager['папка']`."""
         del self.data[key]
@@ -54,6 +58,14 @@ class JsonManager:
         """Удалить файл из папки: `manager.delete_file('папка', 'файл')`."""
         if folder in self.data and file in self.data[folder]:
             del self.data[folder][file]
+            self._save()
+
+    def delete_annotation(self, folder: str, file: str, annotation: dict):
+        """Удалить файл из папки: `manager.delete_file('папка', 'файл')`."""
+        if folder in self.data and file in self.data[folder]:
+            for i, ann in enumerate(self.data[folder][file]):
+                if ann == annotation:
+                    del self.data[folder][file][i]
             self._save()
 
     def __repr__(self) -> str:

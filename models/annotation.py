@@ -10,6 +10,16 @@ class Annotation:
     rect: int
     text_id: int
 
+    def __eq__(self, other):
+        if not isinstance(other, Annotation):
+            return False
+        return (self.coords == other.coords and
+                self.text == other.text and
+                self.ratio == other.ratio)
+
+    def __hash__(self):
+        return hash((tuple(self.coords), self.text, self.ratio))
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'coords': self.coords,
