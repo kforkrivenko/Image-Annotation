@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
-from typing import Any, Union, Optional, Dict, List
+from typing import Any, Union, Dict, List
+from models.annotation import Annotation
 
 
 class JsonManager:
@@ -61,10 +62,10 @@ class JsonManager:
             self._save()
 
     def delete_annotation(self, folder: str, file: str, annotation: dict):
-        """Удалить файл из папки: `manager.delete_file('папка', 'файл')`."""
+        """Удалить аннотацию по файлу из папки."""
         if folder in self.data and file in self.data[folder]:
             for i, ann in enumerate(self.data[folder][file]):
-                if ann == annotation:
+                if Annotation.from_dict(ann) == Annotation.from_dict(annotation):
                     del self.data[folder][file][i]
             self._save()
 

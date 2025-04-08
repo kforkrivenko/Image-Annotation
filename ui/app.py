@@ -1,15 +1,23 @@
+import hashlib
 import os
 import shutil
 import sys
 import tempfile
 import tkinter as tk
+import time
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from PIL import Image, ImageTk
-from logger.logger import log_method
+from utils.logger import log_method
 from data_processing.annotation_saver import AnnotationSaver
 from data_processing.image_loader import ImageLoader
 from ui.canvas import AnnotationCanvas
+from utils.paths import DATA_DIR, BASE_DIR
+
+
+def get_unique_folder_name(source_path: Path) -> str:
+    unique_str = f"{source_path.name}_{time.time_ns()}"  # time_ns() делает уникальным
+    return hashlib.md5(unique_str.encode()).hexdigest()[:8]
 
 
 class FolderLoadError(Exception):
@@ -111,6 +119,25 @@ class AnnotationPopover(tk.Toplevel):
             style="Popover.TButton",
             command=self.destroy
         ).pack(side=tk.RIGHT, padx=5, pady=10)
+
+    def _copy_to_folder_and_rename(self):
+        """Копируем в защищенную папку, переименовываем с помощью хэша"""
+        if self.image_loader and Path(self.image_loader.folder_path).exists():
+            folder_path = Path(self.image_loader.folder_path)
+            if getattr(sys, 'frozen', False):
+                output_dir = DATA_DIR / "annotated_dataset"
+            else:
+                output_dir = BASE_DIR / "annotated_dataset"
+
+            real_name = folder_path.name
+            hash_name = get_unique_folder_name(folder_path)
+            dst_path = output_dir / hash_name
+
+            # TODO
+
+
+
+
 
     def load_folder(self):
         folder_path = filedialog.askdirectory(title="Выберите папку с изображениями")

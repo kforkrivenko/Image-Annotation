@@ -8,7 +8,7 @@ from utils.logger import log_method
 class AnnotationCanvas(tk.Canvas):
     @log_method
     def __init__(self, parent, image_loader, annotation_saver, **kwargs):
-        super().__init__(parent, width=800, height=600, **kwargs)
+        super().__init__(parent, width=800, height=600, bd=0, highlightthickness=0, **kwargs)
         self.annotation_saver = annotation_saver
         self.image_loader = image_loader
         self._setup_canvas()
@@ -16,6 +16,7 @@ class AnnotationCanvas(tk.Canvas):
         self.current_rect = None
         self.image_on_canvas = None
         self.tk_image = None
+        self.image = None
         self.image_path = None
         self.annotations = []
         self.ratio = 1.0
@@ -60,6 +61,7 @@ class AnnotationCanvas(tk.Canvas):
         finally:
             menu.grab_release()
 
+    @log_method
     def _delete_annotation_near(self, x, y):
         """Удаляет ближайшую аннотацию"""
         for i, ann in enumerate(self.annotations):
@@ -67,7 +69,9 @@ class AnnotationCanvas(tk.Canvas):
             if x1 <= x <= x2 and y1 <= y <= y2:
                 self.delete(ann.rect)
                 self.delete(ann.text_id)
+                print("ANNOTATIONS BEFORE:", self.annotations)
                 self.annotations.pop(i)
+                print("ANNOTATIONS AFTER:", self.annotations)
 
                 self.configure(bg=self.cget("bg"))
                 self._delete_annotation_from_file(ann)
@@ -75,14 +79,17 @@ class AnnotationCanvas(tk.Canvas):
                 self._redraw_all_annotations()
                 break
 
+    @log_method
     def _delete_annotation_from_file(self, annotation):
         folder_path, image_path = self.image_loader.folder_path, self.image_loader.get_current_image_path()
+        print("_delete_annotation_from_file", image_path, annotation)
         self.annotation_saver.delete_annotation_from_file(image_path, annotation)
 
     def _add_annotation_to_file(self, annotation):
         folder_path, image_path = self.image_loader.folder_path, self.image_loader.get_current_image_path()
         self.annotation_saver.add_annotation_to_file(image_path, annotation)
 
+    @log_method
     def _edit_annotation_label(self, x, y):
         """Изменяет метку аннотации"""
         for ann in self.annotations:
@@ -141,21 +148,28 @@ class AnnotationCanvas(tk.Canvas):
 
         self._add_annotation_to_file(annotation)
 
+    @log_method
     def display_image(self, image, image_path):
         self.clear()
-        self._draw_image(image)
-        self._draw_image_path(image_path)
+        self._draw_image(image, image_path)
 
-    def _draw_image(self, image):
+    def _draw_image(self, image, image_path):
+        print(type(image))
         img_width, img_height = image.size
         self.ratio = min(800 / img_width, 600 / img_height)
         new_size = (int(img_width * self.ratio), int(img_height * self.ratio))
         resized_image = image.resize(new_size, Image.Resampling.LANCZOS)
 
+        self.image = image
         self.tk_image = ImageTk.PhotoImage(resized_image)
+        self.image_path = image_path
         self.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
+        self._draw_image_path(self.image_path)
 
+    @log_method
     def _draw_image_path(self, image_path):
+        print(image_path)
+
         self.create_text(
             10, 10,
             anchor=tk.NW,
@@ -180,6 +194,7 @@ class AnnotationCanvas(tk.Canvas):
                 event.x, event.y
             )
 
+    @log_method
     def _on_release(self, event):
         if not self.current_rect:
             return
@@ -197,6 +212,7 @@ class AnnotationCanvas(tk.Canvas):
 
         self.current_rect = None
 
+    @log_method
     def _create_annotation(self, coords, label, rect):
         x_center = (coords[0] + coords[2]) / 2
         y_center = (coords[1] + coords[3]) / 2
@@ -254,6 +270,7 @@ class AnnotationCanvas(tk.Canvas):
         """Полностью очищает canvas и сбрасывает все аннотации"""
         self.delete("all")  # Удаляем все элементы с canvas
         self.image_on_canvas = None
+        self.image = None
         self.tk_image = None
         self.image_path = None
         self.annotations = []  # Очищаем список аннотаций
@@ -261,19 +278,18 @@ class AnnotationCanvas(tk.Canvas):
         self.current_rect = None
         self.configure(cursor="arrow")
 
+    @log_method
     def _redraw_all_annotations(self):
         """Полная перерисовка всех элементов"""
         # 1. Сохраняем текущее изображение
-        current_image = self.tk_image
-        current_image_path = self.image_path
+        current_image = self.image
 
         # 2. Полностью очищаем Canvas
         self.delete("all")
 
         # 3. Восстанавливаем изображение (если было)
         if current_image:
-            self.image_on_canvas = self.create_image(0, 0, anchor=tk.NW, image=current_image)
-            self._draw_image_path(current_image_path)
+            self._draw_image(self.image, self.image_path)
 
         # 4. Перерисовываем все аннотации
         for ann in self.annotations:
