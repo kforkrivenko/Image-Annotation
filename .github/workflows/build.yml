@@ -51,10 +51,24 @@ jobs:
           pyinstaller build_mac.spec
           ls -R dist  # Проверка содержимого
 
-      - name: Upload Mac artifact
+      # Сначала работаем с файлами в dist/
+      - name: Remove quarantine
+        run: |
+          xattr -r -d com.apple.quarantine dist/ImageAnnotation.app
+
+      - name: Ad-hoc codesign
+        run: |
+          codesign --force --deep --sign - dist/ImageAnnotation.app
+
+      # Затем архивируем и загружаем
+      - name: Create DMG (optional)
+        run: |
+          hdiutil create -volname "ImageAnnotation" -srcfolder dist/ImageAnnotation.app -ov -format UDZO dist/ImageAnnotation.dmg
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-application
           path: |
             dist/ImageAnnotation.app
-            dist/ImageAnnotation.app/*
+            dist/ImageAnnotation.dmg
