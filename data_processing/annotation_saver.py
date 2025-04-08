@@ -1,4 +1,4 @@
-from utils.json_manager import JsonManager
+from utils.json_manager import AnnotationFileManager
 from .history_manager import DatasetHistoryManager
 import shutil
 from typing import List, Dict
@@ -18,10 +18,8 @@ class AnnotationSaver:
             self.output_dir = BASE_DIR / "annotated_dataset"
 
         self.output_dir.mkdir(exist_ok=True)
-        self.output_dir_images = self.output_dir / "images"
-        self.output_dir_images.mkdir(exist_ok=True)
 
-        self.json_manager = JsonManager(
+        self.json_manager = AnnotationFileManager(
             os.path.join(self.output_dir, 'annotations.json')
         )
 

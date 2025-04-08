@@ -8,6 +8,8 @@ import time
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from PIL import Image, ImageTk
+
+from utils.json_manager import JsonManager
 from utils.logger import log_method
 from data_processing.annotation_saver import AnnotationSaver
 from data_processing.image_loader import ImageLoader
@@ -16,8 +18,8 @@ from utils.paths import DATA_DIR, BASE_DIR
 
 
 def get_unique_folder_name(source_path: Path) -> str:
-    unique_str = f"{source_path.name}_{time.time_ns()}"  # time_ns() делает уникальным
-    return hashlib.md5(unique_str.encode()).hexdigest()[:8]
+    unique_str = source_path.name
+    return str(hashlib.md5(unique_str.encode()).hexdigest()[:8])
 
 
 class FolderLoadError(Exception):
@@ -49,6 +51,8 @@ class AnnotationPopover(tk.Toplevel):
         # Инициализация состояния
         self.image_loader = None
         self.annotation_saver = None
+        self.folder_path = None
+        self.json_manager = None  # Управление hash_to_name
 
         # Рисовка графики
         self._setup_ui()
@@ -120,35 +124,44 @@ class AnnotationPopover(tk.Toplevel):
             command=self.destroy
         ).pack(side=tk.RIGHT, padx=5, pady=10)
 
-    def _copy_to_folder_and_rename(self):
+    def _copy_to_folder_and_rename(self, folder_path):
         """Копируем в защищенную папку, переименовываем с помощью хэша"""
-        if self.image_loader and Path(self.image_loader.folder_path).exists():
-            folder_path = Path(self.image_loader.folder_path)
+        folder_path = Path(folder_path)
+        if folder_path.exists():
             if getattr(sys, 'frozen', False):
                 output_dir = DATA_DIR / "annotated_dataset"
             else:
                 output_dir = BASE_DIR / "annotated_dataset"
 
-            real_name = folder_path.name
             hash_name = get_unique_folder_name(folder_path)
+            self.json_manager = JsonManager(
+                os.path.join(output_dir, 'hash_to_name.json')
+            )
+
             dst_path = output_dir / hash_name
-
-            # TODO
-
-
-
-
+            if hash_name not in self.json_manager.keys():
+                shutil.copytree(folder_path, dst_path)
+                self.folder_path = dst_path
+                self.json_manager[hash_name] = str(folder_path)
+            else:
+                self.folder_path = dst_path
 
     def load_folder(self):
         folder_path = filedialog.askdirectory(title="Выберите папку с изображениями")
         if folder_path:
-            self.image_loader = ImageLoader(folder_path)
-            if len(self.image_loader.image_files) == 0:
+            images = [
+                f for f in os.listdir(folder_path)
+                if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+            ]
+            if not images:
                 raise NoImagesError()
+
+            self._copy_to_folder_and_rename(folder_path)
+            self.image_loader = ImageLoader(self.folder_path)
 
             self.canvas.image_loader = self.image_loader
 
-            self.annotation_saver = AnnotationSaver(folder_path)
+            self.annotation_saver = AnnotationSaver(self.folder_path)
             self.canvas.annotation_saver = self.annotation_saver
             self._load_image()
         else:
