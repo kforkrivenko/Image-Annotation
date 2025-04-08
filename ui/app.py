@@ -39,8 +39,9 @@ class NoImagesError(FolderLoadError):
 
 
 class AnnotationPopover(tk.Toplevel):
-    def __init__(self, parent):
+    def __init__(self, parent, app):
         super().__init__(parent)
+        self.app = app
         self.title("Разметка датасета")
         self.geometry("1200x800")
 
@@ -121,7 +122,7 @@ class AnnotationPopover(tk.Toplevel):
             control_frame,
             text="Готово",
             style="Popover.TButton",
-            command=self.destroy
+            command=self.close
         ).pack(side=tk.RIGHT, padx=5, pady=10)
 
     def _copy_to_folder_and_rename(self, folder_path):
@@ -194,6 +195,10 @@ class AnnotationPopover(tk.Toplevel):
             self.status_var.set(
                 f"Изображение {self.image_loader.current_index + 1}/{len(self.image_loader.image_files)}"
             )
+
+    def close(self):
+        self.destroy()
+        self.app.get_annotated_datasets()
 
 
 def get_resource_path(relative_path):
@@ -274,31 +279,73 @@ class ImageAnnotationApp:
                         font=("Helvetica", 12, "bold"),
                         padding=10)
 
+        # Основной фрейм (оставляем как есть)
         self.main_frame = tk.Frame(self.root)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
-        self.dataset_frame = tk.Frame(self.main_frame)
-        self.dataset_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.dataset_tree = ttk.Treeview(
-            self.dataset_frame,
-            columns="Images",
-            show="headings",
-            height=15
-        )
-        self.dataset_tree.heading("#0", text="Dataset Name")
-        self.dataset_tree.heading("Images", text="Размеченные датасеты")
-        self.dataset_tree.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        # Нижняя часть: разделяем на две колонки
+        self.bottom_frame = tk.Frame(self.main_frame)
+        self.bottom_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Кнопка для открытия выбранного
-        ttk.Button(
-            self.dataset_frame,
-            text="Открыть для редактирования",
-            command=lambda: None
+        # Левая колонка (30% ширины) - для ярлыков
+        self.shortcuts_frame = tk.Frame(self.bottom_frame, bg="#f0f0f0", relief=tk.SUNKEN, borderwidth=1)
+        self.shortcuts_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=5, pady=5)
+        self.shortcuts_frame.pack_propagate(False)  # Фиксируем ширину
+        self.shortcuts_frame.config(width=int(self.root.winfo_screenwidth() * 0.3))  # 30% ширины
+
+        # Заголовок для ярлыков
+        tk.Label(
+            self.shortcuts_frame,
+            text="Доступные датасеты",
+            font=("Arial", 12),
+            bg="#f0f0f0"
         ).pack(pady=10)
+
+        self.annotated_datasets = []
+        self.get_annotated_datasets()
+
+        # Правая колонка
+        self.right_frame = tk.Frame(self.bottom_frame, bg="white", relief=tk.SUNKEN, borderwidth=1)
+        self.right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Заголовок для правой части
+        tk.Label(
+            self.right_frame,
+            text="Дообучение",
+            font=("Arial", 12),
+            bg="white"
+        ).pack(pady=10)
+
+    def get_annotated_datasets(self):
+        if getattr(sys, 'frozen', False):
+            output_dir = DATA_DIR / "annotated_dataset"
+        else:
+            output_dir = BASE_DIR / "annotated_dataset"
+
+        for dataset in self.annotated_datasets:
+            dataset.destroy()
+
+        if output_dir.exists():
+            sub_folders = [f for f in output_dir.iterdir() if f.is_dir()]
+            json_manager = JsonManager(
+                os.path.join(output_dir, 'hash_to_name.json')
+            )
+
+            for sub_folder in sub_folders:
+                real_name = Path(json_manager[sub_folder.name]).name
+                dataset = tk.Button(
+                    self.shortcuts_frame,
+                    text=f"Датасет {real_name}",
+                    bg="#e1e1e1",
+                    relief=tk.FLAT
+                )
+                dataset.pack()
+                self.annotated_datasets.append(dataset)
+
 
     def _show_popover(self):
         """Показывает Popover с интерфейсом разметки"""
-        popover = AnnotationPopover(self.root)
+        popover = AnnotationPopover(self.root, self)
 
         # Центрируем Popover относительно главного окна
         x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
