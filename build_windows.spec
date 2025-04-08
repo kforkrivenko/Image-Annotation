@@ -11,7 +11,6 @@ a = Analysis(
         ('ui', 'ui'),
         ('data_processing', 'data_processing'),
         ('models', 'models'),
-        ('logger', 'logger'),
         ('utils', 'utils'),
     ],
     hiddenimports=['tkinter', 'PIL'],
