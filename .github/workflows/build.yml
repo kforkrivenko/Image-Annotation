@@ -42,48 +42,39 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
 
-      - name: Build with PyInstaller
+      - name: Build with SPEC
         run: |
-          pyinstaller --onefile --windowed --name ImageAnnotation your_script.py
+          pyinstaller build_mac.spec
+          ls -R dist
 
-      - name: Remove macOS quarantine
+      - name: Remove quarantine
         run: |
           xattr -r -d com.apple.quarantine dist/ImageAnnotation.app
 
+      - name: Ad-hoc codesign
+        run: |
+          codesign --force --deep --sign - dist/ImageAnnotation.app
+
       - name: Create DMG
         run: |
-          brew install create-dmg || true
           create-dmg \
             --volname "ImageAnnotation" \
+            --background "background.png" \
             --window-pos 200 120 \
-            --window-size 600 300 \
+            --window-size 600 400 \
             --icon-size 100 \
-            --icon "ImageAnnotation.app" 150 150 \
-            --hide-extension "ImageAnnotation.app" \
-            --app-drop-link 450 150 \
+            --icon "ImageAnnotation.app" 150 190 \
+            --app-drop-link 450 190 \
             "ImageAnnotation.dmg" \
             "dist/ImageAnnotation.app"
 
-      - name: Notarize (optional)
-        if: false # Установите true если есть Apple Developer ID
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-        run: |
-          xcrun altool --notarize-app \
-            --primary-bundle-id "com.yourcompany.ImageAnnotation" \
-            --username "$APPLE_ID" \
-            --password "$APPLE_PASSWORD" \
-            --file "ImageAnnotation.dmg"
-
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ImageAnnotation-MacOS
+          name: MacOS-Build
           path: |
             dist/ImageAnnotation.app
             ImageAnnotation.dmg
