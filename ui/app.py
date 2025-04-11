@@ -287,19 +287,19 @@ class ImageAnnotationApp:
         self.bottom_frame = tk.Frame(self.main_frame)
         self.bottom_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Левая колонка (30% ширины) - для ярлыков
-        self.shortcuts_frame = tk.Frame(self.bottom_frame, bg="#f0f0f0", relief=tk.SUNKEN, borderwidth=1)
-        self.shortcuts_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=5, pady=5)
-        self.shortcuts_frame.pack_propagate(False)  # Фиксируем ширину
-        self.shortcuts_frame.config(width=int(self.root.winfo_screenwidth() * 0.3))  # 30% ширины
+        # # Левая колонка (30% ширины) - для ярлыков
+        # self.shortcuts_frame = tk.Frame(self.bottom_frame, bg="#f0f0f0", relief=tk.SUNKEN, borderwidth=1)
+        # self.shortcuts_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=5, pady=5)
+        # self.shortcuts_frame.pack_propagate(False)  # Фиксируем ширину
+        # self.shortcuts_frame.config(width=int(self.root.winfo_screenwidth() * 0.3))  # 30% ширины
 
-        # Заголовок для ярлыков
-        tk.Label(
-            self.shortcuts_frame,
-            text="Доступные датасеты",
-            font=("Arial", 12),
-            bg="#f0f0f0"
-        ).pack(pady=10)
+        # # Заголовок для ярлыков
+        # tk.Label(
+        #     self.shortcuts_frame,
+        #     text="Доступные датасеты",
+        #     font=("Arial", 12),
+        #     bg="#f0f0f0"
+        # ).pack(pady=10)
 
         self.annotated_datasets = []
         self.get_annotated_datasets()
@@ -322,26 +322,106 @@ class ImageAnnotationApp:
         else:
             output_dir = BASE_DIR / "annotated_dataset"
 
+        # Очищаем предыдущие датасеты
         for dataset in self.annotated_datasets:
             dataset.destroy()
+        self.annotated_datasets = []
 
-        if output_dir.exists():
-            sub_folders = [f for f in output_dir.iterdir() if f.is_dir()]
-            json_manager = JsonManager(
-                os.path.join(output_dir, 'hash_to_name.json')
+        if not output_dir.exists():
+            return
+
+        # Основной контейнер для левой колонки
+        left_container = tk.Frame(self.bottom_frame, bg="white")
+        left_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Заголовок
+        tk.Label(
+            left_container,
+            text="Аннотированные датасеты",
+            font=("Arial", 12),
+            bg="white"
+        ).pack(pady=5)
+
+        # Создаем Canvas с двойной прокруткой
+        canvas = tk.Canvas(left_container, bg="white")
+        h_scroll = tk.Scrollbar(left_container, orient="horizontal", command=canvas.xview)
+        v_scroll = tk.Scrollbar(left_container, orient="vertical", command=canvas.yview)
+        canvas.configure(xscrollcommand=h_scroll.set, yscrollcommand=v_scroll.set)
+
+        # Фрейм для содержимого внутри Canvas
+        scrollable_frame = tk.Frame(canvas, bg="white")
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        # Упаковка скроллбаров и canvas
+        h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+        v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Обновление скроллрегиона при изменении содержимого
+        def configure_scrollregion(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            # Ограничиваем минимальную ширину для горизонтального скролла
+            if scrollable_frame.winfo_reqwidth() < canvas.winfo_width():
+                canvas.configure(scrollregion=(0, 0, canvas.winfo_width(), canvas.bbox("all")[3]))
+
+        scrollable_frame.bind("<Configure>", configure_scrollregion)
+
+        # Получаем список датасетов
+        sub_folders = [f for f in output_dir.iterdir() if f.is_dir()]
+        json_manager = JsonManager(os.path.join(output_dir, 'hash_to_name.json'))
+
+        # Параметры сетки
+        ITEMS_PER_ROW = 3  # Количество датасетов в строке
+        ITEM_WIDTH = 150  # Ширина одного элемента
+        PREVIEW_SIZE = 80  # Размер превью изображения
+
+        for i, sub_folder in enumerate(sub_folders):
+            real_name = Path(json_manager[sub_folder.name]).name
+
+            # Фрейм для одного датасета
+            item_frame = tk.Frame(
+                scrollable_frame,
+                width=ITEM_WIDTH,
+                height=ITEM_WIDTH + 30,
+                bg="white",
+                bd=1,
+                relief=tk.RAISED
             )
+            item_frame.grid(
+                row=i // ITEMS_PER_ROW,
+                column=i % ITEMS_PER_ROW,
+                padx=5,
+                pady=5,
+                sticky="nsew"
+            )
+            item_frame.grid_propagate(False)  # Фиксируем размер
 
-            for sub_folder in sub_folders:
-                real_name = Path(json_manager[sub_folder.name]).name
-                dataset = tk.Button(
-                    self.shortcuts_frame,
-                    text=f"Датасет {real_name}",
-                    bg="#e1e1e1",
-                    relief=tk.FLAT
-                )
-                dataset.pack()
-                self.annotated_datasets.append(dataset)
+            # Загрузка превью изображения
+            image_files = list(sub_folder.glob("*.jpg")) + list(sub_folder.glob("*.png"))
+            if image_files:
+                try:
+                    img = Image.open(image_files[0])
+                    img.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE))
+                    photo = ImageTk.PhotoImage(img)
 
+                    img_label = tk.Label(item_frame, image=photo, bg="white")
+                    img_label.image = photo
+                    img_label.pack(pady=2)
+                except Exception as e:
+                    print(f"Ошибка загрузки изображения: {e}")
+
+            # Кнопка датасета
+            dataset_btn = tk.Button(
+                item_frame,
+                text=real_name,
+                bg="#e1e1e1",
+                relief=tk.FLAT,
+                width=15,
+                wraplength=ITEM_WIDTH - 20
+            )
+            dataset_btn.pack(fill=tk.X, padx=5, pady=2)
+
+            self.annotated_datasets.append(item_frame)
 
     def _show_popover(self):
         """Показывает Popover с интерфейсом разметки"""
