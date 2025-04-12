@@ -9,7 +9,7 @@ from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from PIL import Image, ImageTk
 
-from utils.json_manager import JsonManager
+from utils.json_manager import JsonManager, AnnotationFileManager
 from utils.logger import log_method
 from data_processing.annotation_saver import AnnotationSaver
 from data_processing.image_loader import ImageLoader
@@ -412,11 +412,50 @@ class ImageAnnotationApp:
                 wraplength=ITEM_WIDTH - 20,
                 command=lambda sub=sub_folder: self._modify_dataset(sub)
             )
+
             dataset_btn.pack(fill=tk.X, padx=5, pady=2)
 
-            self.annotated_datasets.append(
-                item_frame
+            annotated_imgs, imgs = self._get_dataset_stat(sub_folder)
+
+            # Статистика разметки
+            stat_label = tk.Label(
+                item_frame,
+                text=f"{annotated_imgs}/{imgs}",
+                bg="white"
             )
+            stat_label.pack(pady=2)
+
+            self.annotated_datasets.append(item_frame)
+
+    def _translate_from_hash(self, hash_folder: Path):
+        if getattr(sys, 'frozen', False):
+            output_dir = DATA_DIR / "annotated_dataset"
+        else:
+            output_dir = BASE_DIR / "annotated_dataset"
+        json_manager = JsonManager(
+            os.path.join(output_dir, 'hash_to_name.json')
+        )
+
+        real_path = json_manager[hash_folder.name]
+        return real_path
+
+    def _get_dataset_stat(self, folder):
+        if getattr(sys, 'frozen', False):
+            output_dir = DATA_DIR / "annotated_dataset"
+        else:
+            output_dir = BASE_DIR / "annotated_dataset"
+        json_manager = AnnotationFileManager(
+            os.path.join(output_dir, 'annotations.json')
+        )
+
+        imgs = len([
+            f for f in os.listdir(folder)
+            if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+        ])
+
+        annotated_imgs = len(json_manager.get_folder_info(str(folder)).keys())
+
+        return annotated_imgs, imgs
 
     def _modify_dataset(self, folder_path):
         print(folder_path)
