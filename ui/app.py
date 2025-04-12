@@ -147,8 +147,12 @@ class AnnotationPopover(tk.Toplevel):
             else:
                 self.folder_path = dst_path
 
-    def load_folder(self):
-        folder_path = filedialog.askdirectory(title="Выберите папку с изображениями")
+    def load_folder(self, path=None):
+        if path:
+            folder_path = Path(path)
+            self.folder_path = path
+        else:
+            folder_path = filedialog.askdirectory(title="Выберите папку с изображениями")
         if folder_path:
             images = [
                 f for f in os.listdir(folder_path)
@@ -157,7 +161,8 @@ class AnnotationPopover(tk.Toplevel):
             if not images:
                 raise NoImagesError()
 
-            self._copy_to_folder_and_rename(folder_path)
+            if not path:
+                self._copy_to_folder_and_rename(folder_path)
             self.image_loader = ImageLoader(self.folder_path)
 
             self.canvas.image_loader = self.image_loader
@@ -287,20 +292,34 @@ class ImageAnnotationApp:
         self.bottom_frame = tk.Frame(self.main_frame)
         self.bottom_frame.pack(fill=tk.BOTH, expand=True)
 
-        # # Левая колонка (30% ширины) - для ярлыков
-        # self.shortcuts_frame = tk.Frame(self.bottom_frame, bg="#f0f0f0", relief=tk.SUNKEN, borderwidth=1)
-        # self.shortcuts_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=5, pady=5)
-        # self.shortcuts_frame.pack_propagate(False)  # Фиксируем ширину
-        # self.shortcuts_frame.config(width=int(self.root.winfo_screenwidth() * 0.3))  # 30% ширины
+        # Основной контейнер для левой колонки
+        left_container = tk.Frame(self.bottom_frame, bg="white")
+        left_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # # Заголовок для ярлыков
-        # tk.Label(
-        #     self.shortcuts_frame,
-        #     text="Доступные датасеты",
-        #     font=("Arial", 12),
-        #     bg="#f0f0f0"
-        # ).pack(pady=10)
+        # Заголовок
+        tk.Label(
+            left_container,
+            text="Аннотированные датасеты",
+            font=("Arial", 12),
+            bg="white"
+        ).pack(pady=5)
 
+        # Создаем Canvas с двойной прокруткой
+        self.canvas = tk.Canvas(left_container, bg="white")
+        h_scroll = tk.Scrollbar(left_container, orient="horizontal", command=self.canvas.xview)
+        v_scroll = tk.Scrollbar(left_container, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(xscrollcommand=h_scroll.set, yscrollcommand=v_scroll.set)
+
+        # Фрейм для содержимого внутри Canvas
+        self.scrollable_frame = tk.Frame(self.canvas, bg="white")
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+
+        # Упаковка скроллбаров и canvas
+        h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+        v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Виджеты датасетов
         self.annotated_datasets = []
         self.get_annotated_datasets()
 
@@ -330,41 +349,14 @@ class ImageAnnotationApp:
         if not output_dir.exists():
             return
 
-        # Основной контейнер для левой колонки
-        left_container = tk.Frame(self.bottom_frame, bg="white")
-        left_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Заголовок
-        tk.Label(
-            left_container,
-            text="Аннотированные датасеты",
-            font=("Arial", 12),
-            bg="white"
-        ).pack(pady=5)
-
-        # Создаем Canvas с двойной прокруткой
-        canvas = tk.Canvas(left_container, bg="white")
-        h_scroll = tk.Scrollbar(left_container, orient="horizontal", command=canvas.xview)
-        v_scroll = tk.Scrollbar(left_container, orient="vertical", command=canvas.yview)
-        canvas.configure(xscrollcommand=h_scroll.set, yscrollcommand=v_scroll.set)
-
-        # Фрейм для содержимого внутри Canvas
-        scrollable_frame = tk.Frame(canvas, bg="white")
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-
-        # Упаковка скроллбаров и canvas
-        h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
-        v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # Обновление скроллрегиона при изменении содержимого
+            # Обновление скроллрегиона при изменении содержимого
         def configure_scrollregion(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
             # Ограничиваем минимальную ширину для горизонтального скролла
-            if scrollable_frame.winfo_reqwidth() < canvas.winfo_width():
-                canvas.configure(scrollregion=(0, 0, canvas.winfo_width(), canvas.bbox("all")[3]))
+            if self.scrollable_frame.winfo_reqwidth() < self.canvas.winfo_width():
+                self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), self.canvas.bbox("all")[3]))
 
-        scrollable_frame.bind("<Configure>", configure_scrollregion)
+        self.scrollable_frame.bind("<Configure>", configure_scrollregion)
 
         # Получаем список датасетов
         sub_folders = [f for f in output_dir.iterdir() if f.is_dir()]
@@ -380,7 +372,7 @@ class ImageAnnotationApp:
 
             # Фрейм для одного датасета
             item_frame = tk.Frame(
-                scrollable_frame,
+                self.scrollable_frame,
                 width=ITEM_WIDTH,
                 height=ITEM_WIDTH + 30,
                 bg="white",
@@ -417,11 +409,30 @@ class ImageAnnotationApp:
                 bg="#e1e1e1",
                 relief=tk.FLAT,
                 width=15,
-                wraplength=ITEM_WIDTH - 20
+                wraplength=ITEM_WIDTH - 20,
+                command=lambda sub=sub_folder: self._modify_dataset(sub)
             )
             dataset_btn.pack(fill=tk.X, padx=5, pady=2)
 
-            self.annotated_datasets.append(item_frame)
+            self.annotated_datasets.append(
+                item_frame
+            )
+
+    def _modify_dataset(self, folder_path):
+        print(folder_path)
+        popover = AnnotationPopover(self.root, self)
+
+        # Центрируем Popover относительно главного окна
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
+        popover.geometry(f"+{x}+{y}")
+
+        # Пытаемся загрузить папку с картинками
+        try:
+            popover.load_folder(folder_path)
+        except NoImagesError as e:
+            e.show_tkinter_error()
+            popover.destroy()
 
     def _show_popover(self):
         """Показывает Popover с интерфейсом разметки"""
