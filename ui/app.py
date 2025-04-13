@@ -3,8 +3,12 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import tkinter as tk
-import time
+from collections import defaultdict
+from time import sleep
+
+from api.api import get_dataset, get_datasets_info
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from PIL import Image, ImageTk
@@ -54,6 +58,7 @@ class AnnotationPopover(tk.Toplevel):
         self.annotation_saver = None
         self.folder_path = None
         self.json_manager = None  # Управление hash_to_name
+        self.current_blazon = None
 
         # Рисовка графики
         self._setup_ui()
@@ -85,7 +90,14 @@ class AnnotationPopover(tk.Toplevel):
 
         text_var.trace_add("write", on_text_change)
 
-        ttk.Label(right_frame, text="Разметка:").pack(pady=5)
+        self.current_blazon_label = ttk.Label(
+            right_frame,
+            text=f"{self.current_blazon}",
+            wraplength=300,  # Ширина в пикселях, после которой будет перенос
+            justify='left'  # Выравнивание текста (left/center/right)
+        )
+        self.current_blazon_label.pack(pady=5)
+        ttk.Label(right_frame, text="Разметка:").pack(pady=10)
         ttk.Entry(right_frame, textvariable=text_var, width=30).pack(pady=5)
 
         # Canvas для изображений
@@ -175,10 +187,32 @@ class AnnotationPopover(tk.Toplevel):
 
     @log_method
     def _load_image(self, direction="next"):
+        if getattr(sys, 'frozen', False):
+            output_dir = DATA_DIR / "annotated_dataset"
+        else:
+            output_dir = BASE_DIR / "annotated_dataset"
         if self.image_loader:
+            json_manager = JsonManager(os.path.join(output_dir, 'blazons.json'))
+
             img = self.image_loader.get_image(direction)
             if img:
                 current_image_path = self.image_loader.get_current_image_path()
+                folder_path = self.image_loader.folder_path
+                hash = str(folder_path).split('/')[-1]
+                print("HEEEERE", folder_path, current_image_path)
+
+                try:
+                    print(json_manager[hash][current_image_path])
+                    self.current_blazon = json_manager[hash][current_image_path]
+                except Exception:
+                    self.current_blazon = ""
+
+                self.current_blazon_label.config(
+                    text=f"{self.current_blazon}"
+                )
+
+                print("CURRENT", self.current_blazon)
+
                 self.canvas.display_image(img, current_image_path)
                 self._load_existing_annotations(current_image_path)
                 self._update_status()
@@ -268,13 +302,24 @@ class ImageAnnotationApp:
 
     def _setup_ui(self):
         # Главная кнопка
+        button_frame = tk.Frame(self.root)
+        button_frame.pack(pady=50)
+
         self.annotate_btn = tk.Button(
-            self.root,
+            button_frame,
             text="Загрузить папку для разметки",
             command=self._show_popover,
             bg="#e1e1e1"
         )
-        self.annotate_btn.pack(pady=50, padx=20, ipadx=20, ipady=10)
+        self.annotate_btn.pack(side=tk.LEFT, padx=20, ipadx=20, ipady=10)
+
+        self.annotate_btn_googledrive = tk.Button(
+            button_frame,
+            text="Загрузить папку для разметки из Google Drive",
+            command=self._show_gdrive_folder_selector,
+            bg="#e1e1e1"
+        )
+        self.annotate_btn_googledrive.pack(side=tk.LEFT, padx=20, ipadx=20, ipady=10)
 
         # Настройка стилей
         style = ttk.Style()
@@ -284,7 +329,7 @@ class ImageAnnotationApp:
                         font=("Helvetica", 12, "bold"),
                         padding=10)
 
-        # Основной фрейм (оставляем как есть)
+        # Основной фрейм
         self.main_frame = tk.Frame(self.root)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -389,7 +434,8 @@ class ImageAnnotationApp:
             item_frame.grid_propagate(False)  # Фиксируем размер
 
             # Загрузка превью изображения
-            image_files = list(sub_folder.glob("*.jpg")) + list(sub_folder.glob("*.png"))
+            image_files = (list(sub_folder.glob("*.jpg")) + list(sub_folder.glob("*.jpeg")) +
+                           list(sub_folder.glob("*.png")))
             if image_files:
                 try:
                     img = Image.open(image_files[0])
@@ -488,6 +534,267 @@ class ImageAnnotationApp:
         except NoImagesError as e:
             e.show_tkinter_error()
             popover.destroy()
+
+    def _show_gdrive_folder_selector(self):
+        """Всплывающее окно с множественным выбором папок"""
+        self.selector_window = tk.Toplevel(self.root)
+        self.selector_window.title("Выберите папки (Ctrl+ЛКМ для множественного выбора)")
+        self.selector_window.geometry("500x600")
+
+        # Контейнер для списка папок
+        frame = tk.Frame(self.selector_window)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Список папок с множественным выбором
+        self.folder_listbox = tk.Listbox(
+            frame,
+            selectmode=tk.MULTIPLE,
+            font=('Arial', 11),
+            height=20,
+            bg='white',
+            fg='#333',
+            selectbackground='#4285F4',
+            activestyle='none'
+        )
+
+        scrollbar = tk.Scrollbar(frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.folder_listbox.pack(fill=tk.BOTH, expand=True)
+        self.folder_listbox.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=self.folder_listbox.yview)
+
+        # Загрузка папок
+        self._load_folders()
+
+        # Кнопки управления
+        btn_frame = tk.Frame(self.selector_window)
+        btn_frame.pack(pady=10)
+
+        tk.Button(
+            btn_frame,
+            text="Выбрать",
+            command=self._confirm_selection,
+            bg="#34A853",
+            fg="black",
+            padx=20
+        ).pack(side=tk.LEFT, padx=10)
+
+        tk.Button(
+            btn_frame,
+            text="Отмена",
+            command=self.selector_window.destroy,
+            bg="#EA4335",
+            fg="black",
+            padx=20
+        ).pack(side=tk.LEFT, padx=10)
+
+    def _load_folders(self):
+        """Загрузка папок через API"""
+        try:
+            # Ваш API-запрос для получения папок
+            df = get_datasets_info()
+            folders = list(sorted(list(set(df['Регион']))))
+
+            self.folder_listbox.delete(0, tk.END)
+            self.all_folders = []  # Сохраняем полные данные
+
+            for folder in folders:
+                self.folder_listbox.insert(tk.END, folder)
+                self.all_folders.append(folder)
+
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось загрузить папки:\n{str(e)}")
+
+    def _confirm_selection(self):
+        """Обработка выбранных папок"""
+        selected_indices = self.folder_listbox.curselection()
+
+        if not selected_indices:
+            messagebox.showwarning("Внимание", "Выберите хотя бы одну папку")
+            return
+
+        selected_folders = [self.all_folders[i] for i in selected_indices]
+
+        # Создаем окно прогресса
+        self.progress_window = tk.Toplevel(self.selector_window)
+        self.progress_window.title("Загрузка файлов")
+        self.progress_window.geometry("400x200")
+
+        # Элементы отображения прогресса
+        tk.Label(self.progress_window, text="Идет загрузка файлов...", font=('Arial', 12)).pack(pady=10)
+
+        self.progress_label = tk.Label(self.progress_window, text="Подготовка к загрузке...")
+        self.progress_label.pack(pady=5)
+
+        self.progress_bar = ttk.Progressbar(
+            self.progress_window,
+            orient=tk.HORIZONTAL,
+            length=300,
+            mode='determinate'
+        )
+        self.progress_bar.pack(pady=10)
+
+        self.current_file_label = tk.Label(self.progress_window, text="", wraplength=350)
+        self.current_file_label.pack(pady=5)
+
+        # Кнопка отмены
+        tk.Button(
+            self.progress_window,
+            text="Отменить",
+            command=self._cancel_processing,
+            bg="#EA4335",
+            fg="black"
+        ).pack(pady=10)
+
+        # Запускаем обработку в отдельном потоке
+        self.processing_cancelled = False
+        threading.Thread(
+            target=self._process_folders_with_progress,
+            args=(selected_folders,),
+            daemon=True
+        ).start()
+
+    def _process_folders_with_progress(self, folders):
+        """Обработка папок с обновлением прогресса"""
+        try:
+            df = get_datasets_info()
+            self.progress_bar["maximum"] = len(df[df['Регион'].isin(folders)])
+
+            # Получаем итератор
+            dataset_iterator = get_dataset(folders)
+            window_active = True
+
+            images_from_google_drive = defaultdict(list[tuple])
+
+            i = 0
+            for i, (blazon, image, name, region) in enumerate(dataset_iterator):
+                if self.processing_cancelled or not window_active:
+                    break  # Прерываем цикл при отмене
+
+                if not self.progress_window.winfo_exists():  # Проверяем, существует ли окно
+                    window_active = False
+                    break
+
+                # Обновляем UI
+                try:
+                    self.root.after(0, self._update_progress, {
+                        'current': i + 1,
+                        'total': self.progress_bar["maximum"],
+                        'name': name,
+                        'region': region
+                    })
+                except tk.TclError:
+                    window_active = False
+                    break
+
+                images_from_google_drive[region].append((image, blazon, name))
+
+                # Добавляем небольшую задержку для обработки событий
+                sleep(0.01)
+
+            # Завершение обработки
+            if window_active and self.progress_window.winfo_exists():
+                self.root.after(0, self._finish_processing, not self.processing_cancelled)
+
+            if not self.processing_cancelled and window_active:
+                self._save_google_drive_files(images_from_google_drive)
+
+        except Exception as e:
+            self.root.after(0, self._show_error, str(e))
+
+    def _save_google_drive_files(self, files):
+        if getattr(sys, 'frozen', False):
+            output_dir = DATA_DIR / "annotated_dataset"
+        else:
+            output_dir = BASE_DIR / "annotated_dataset"
+
+        for folder, images in files.items():
+            real_name = output_dir / (folder + "_drive")
+            hash_name = get_unique_folder_name(real_name)
+            os.makedirs(output_dir / hash_name, exist_ok=True)
+
+            json_manager = JsonManager(
+                os.path.join(output_dir, 'hash_to_name.json')
+            )
+
+            if hash_name not in json_manager.keys():
+                json_manager[hash_name] = str(real_name)
+            else:
+                real_name = str(real_name) + "_copy"
+                hash_name = get_unique_folder_name(Path(real_name))
+                json_manager[hash_name] = str(real_name)
+
+                os.makedirs(output_dir / hash_name, exist_ok=True)
+
+            for i, (img, blazon, name) in enumerate(images):
+                if not isinstance(img, Image.Image):
+                    print(f"Элемент с индексом {i} не является изображением PIL")
+                    continue
+
+                filepath = os.path.join(output_dir / hash_name, name + '.jpg')
+
+                # Сохраняем в формате JPG
+                img.save(filepath, format="JPEG")
+
+                # Cохраняем блазон
+                json_manager = JsonManager(
+                    os.path.join(output_dir, 'blazons.json')
+                )
+
+                if hash_name not in json_manager.keys():
+                    json_manager[hash_name] = {name + '.jpg': blazon}
+                else:
+                    d = json_manager[hash_name]
+                    d[name + '.jpg'] = blazon
+                    json_manager[hash_name] = d
+
+                print(f"Сохранено: {filepath}")
+        self.get_annotated_datasets()
+
+    def _update_progress(self, data):
+        """Обновление элементов прогресса"""
+        try:
+            if not hasattr(self, 'progress_window') or not self.progress_window.winfo_exists():
+                return
+            self.progress_bar["value"] = data['current']
+            self.progress_label.config(
+                text=f"Обработано: {data['current']} из {data['total']} файлов "
+                     f"({data['current'] / data['total'] * 100:.1f}%)"
+            )
+            self.current_file_label.config(
+                text=f"Текущий файл: {data['name']}"
+            )
+        except tk.TclError:
+            pass
+
+    def _finish_processing(self, success):
+        """Завершение обработки с разными сценариями"""
+        try:
+            if not self.progress_window.winfo_exists():
+                return
+            if success:
+                messagebox.showinfo("Готово", "Все файлы успешно обработаны!")
+            elif not success and self.processing_cancelled:
+                messagebox.showinfo("Отменено", "Обработка прервана пользователем")
+            self.progress_window.destroy()
+            self.selector_window.destroy()
+        except tk.TclError:
+            pass
+
+    def _cancel_processing(self):
+        """Обработка отмены с четким разделением состояний"""
+        self.processing_cancelled = True
+        try:
+            if hasattr(self, 'progress_window') and self.progress_window.winfo_exists():
+                self.progress_label.config(text="Завершение процесса...")
+                self.progress_window.after(500, self.progress_window.destroy)
+        except tk.TclError:
+            pass
+
+    def _show_error(self, error_msg):
+        """Отображение ошибки"""
+        self.progress_window.destroy()
+        messagebox.showerror("Ошибка", f"Произошла ошибка:\n{error_msg}")
 
     def run(self):
         self.root.mainloop()

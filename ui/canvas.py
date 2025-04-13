@@ -69,9 +69,7 @@ class AnnotationCanvas(tk.Canvas):
             if x1 <= x <= x2 and y1 <= y <= y2:
                 self.delete(ann.rect)
                 self.delete(ann.text_id)
-                print("ANNOTATIONS BEFORE:", self.annotations)
                 self.annotations.pop(i)
-                print("ANNOTATIONS AFTER:", self.annotations)
 
                 self.configure(bg=self.cget("bg"))
                 self._delete_annotation_from_file(ann)
@@ -82,7 +80,7 @@ class AnnotationCanvas(tk.Canvas):
     @log_method
     def _delete_annotation_from_file(self, annotation):
         folder_path, image_path = self.image_loader.folder_path, self.image_loader.get_current_image_path()
-        print("_delete_annotation_from_file", image_path, annotation)
+
         self.annotation_saver.delete_annotation_from_file(image_path, annotation)
 
     def _add_annotation_to_file(self, annotation):

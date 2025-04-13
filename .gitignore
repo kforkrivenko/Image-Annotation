@@ -16,3 +16,6 @@ dist/
 build/
 .DS_Store
 *.rtf
+token.json
+notebooks
+client_secret_heraldy.json
