@@ -1,82 +1,78 @@
-name: Build via SPEC
+name: Cross-Platform Build
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    tags:
+      - 'v*'  # Запускать при создании тегов (v1.0.0)
+  workflow_dispatch:  # Ручной запуск
 
 jobs:
-  build_windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: '3.12'  # Используйте вашу версию Python
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
 
-      - name: Build with SPEC (Windows)
+      - name: Build application
         run: |
-          pyinstaller build_windows.spec
-          ls -R dist  # Проверка содержимого
+          # Уникальные настройки для каждой ОС
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            OUTPUT_NAME="ImageAnnotation"
+            ICON="favicons/favicon.icns"
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            OUTPUT_NAME="ImageAnnotation.exe"
+            ICON="favicons/favicon.ico"
+          else
+            OUTPUT_NAME="ImageAnnotation"
+            ICON=""
+          fi
 
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-application
-          path: |
-            dist/ImageAnnotationTool.exe
-            dist/ImageAnnotationTool/*
-  build_mac:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
+          # Запуск PyInstaller
+          pyinstaller build.spec --name $OUTPUT_NAME $( [[ -n "$ICON" ]] && echo "--icon $ICON" )
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
+      - name: Prepare artifacts
         run: |
-          pip install pyinstaller
-          pip install -r requirements.txt
-          
-          brew install create-dmg
-
-      - name: Build with SPEC
-        run: |
-          pyinstaller build_mac.spec
-          ls -R dist
-
-      - name: Remove quarantine
-        run: |
-          xattr -r -d com.apple.quarantine dist/ImageAnnotation.app
-
-      - name: Ad-hoc codesign
-        run: |
-          codesign --force --deep --sign - dist/ImageAnnotation.app
-
-      - name: Create DMG
-        run: |
-          create-dmg \
-            --volname "ImageAnnotation" \
-            --background "background.png" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "ImageAnnotation.app" 150 190 \
-            --app-drop-link 450 190 \
-            "ImageAnnotation.dmg" \
-            "dist/ImageAnnotation.app"
+          # Упаковываем результаты
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            cd dist
+            zip -r ImageAnnotation-macOS.zip ImageAnnotation.app
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            cd dist
+            7z a ImageAnnotation-Windows.zip ImageAnnotation.exe
+          else
+            cd dist
+            tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation
+          fi
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
-          name: MacOS-Build
+          name: ${{ runner.os }}-Build
           path: |
-            dist/ImageAnnotation.app
-            ImageAnnotation.dmg
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.app/**  # Для macOS
+
+      - name: Create Release (only on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/ImageAnnotation*.zip
+            dist/ImageAnnotation*.tar.gz
+            dist/*.app/**  # Для macOS
