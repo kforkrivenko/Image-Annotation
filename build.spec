@@ -44,13 +44,6 @@ python_lib = find_python_lib()
 # 2. Сбор данных и зависимостей
 # ========================================================
 
-if sys.platform == 'darwin':
-    icon = 'favicons/favicon.icns'
-elif sys.platform == 'win32':
-    icon = 'favicons/favicon.ico'
-else:
-    icon = None
-
 # Основные зависимости
 datas, binaries, hiddenimports  = [], [], []
 for module in ['utils', 'ui', 'models', 'data_processing', 'api']:
@@ -105,7 +98,6 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     name='ImageAnnotation',
-    icon=icon,
     debug=False,
     strip=False,
     upx=True,
