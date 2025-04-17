@@ -81,7 +81,6 @@ a = Analysis(
     noarchive=True,
     runtime_tmpdir=None,
     python_optimize=0,
-    runtime_hooks=[os.path.join(os.getcwd(), 'hooks/runtime_hook.py')],
     upx=True if platform.system() != "Darwin" else False  # UPX может вызывать проблемы на macOS
 )
 
