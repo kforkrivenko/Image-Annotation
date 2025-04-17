@@ -31,31 +31,32 @@ jobs:
       - name: Package artifacts
         run: |
           cd dist
-          if [ "$RUNNER_OS" == "macOS" ]; then
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
             echo "Packaging macOS app..."
-            if [ -d "ImageAnnotation.app" ]; then
+            if [[ -d "ImageAnnotation.app" ]]; then
               zip -r ImageAnnotation-macOS.zip ImageAnnotation.app
             else
               echo "::error::macOS app bundle not found!"
               exit 1
             fi
-          elif [ "$RUNNER_OS" == "Windows" ]; then
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
             echo "Packaging Windows app..."
-            if [ -f "ImageAnnotation.exe" ]; then
-              powershell -command "Compress-Archive -Path ImageAnnotation.exe -DestinationPath ImageAnnotation-Windows.zip"
+            if [[ -f "ImageAnnotation.exe" ]]; then
+              powershell Compress-Archive -Path ImageAnnotation.exe -DestinationPath ImageAnnotation-Windows.zip
             else
               echo "::error::Windows executable not found!"
               exit 1
             fi
           else
             echo "Packaging Linux app..."
-            if [ -f "ImageAnnotation" ]; then
+            if [[ -f "ImageAnnotation" ]]; then
               tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation
             else
               echo "::error::Linux executable not found!"
               exit 1
             fi
           fi
+        shell: bash
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
