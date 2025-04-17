@@ -28,18 +28,33 @@ jobs:
           # Запуск PyInstaller
           pyinstaller build.spec
 
-      - name: Prepare artifacts
+      - name: Package artifacts
         run: |
-          # Упаковываем результаты
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            cd dist
-            zip -r ImageAnnotation-macOS.zip ImageAnnotation.app
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            cd dist
-            7z a ImageAnnotation-Windows.zip ImageAnnotation.exe
+          cd dist
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            echo "Packaging macOS app..."
+            if [ -d "ImageAnnotation.app" ]; then
+              zip -r ImageAnnotation-macOS.zip ImageAnnotation.app
+            else
+              echo "::error::macOS app bundle not found!"
+              exit 1
+            fi
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            echo "Packaging Windows app..."
+            if [ -f "ImageAnnotation.exe" ]; then
+              powershell -command "Compress-Archive -Path ImageAnnotation.exe -DestinationPath ImageAnnotation-Windows.zip"
+            else
+              echo "::error::Windows executable not found!"
+              exit 1
+            fi
           else
-            cd dist
-            tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation
+            echo "Packaging Linux app..."
+            if [ -f "ImageAnnotation" ]; then
+              tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation
+            else
+              echo "::error::Linux executable not found!"
+              exit 1
+            fi
           fi
 
       - name: Upload artifacts
