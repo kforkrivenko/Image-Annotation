@@ -45,6 +45,7 @@ python_lib = find_python_lib()
 # ========================================================
 
 # Основные зависимости
+datas, binaries, hiddenimports  = [], [], []
 for module in ['utils', 'ui', 'models', 'data_processing', 'api']:
     d, b, h = collect_all(module)
     datas += d
