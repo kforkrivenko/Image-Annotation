@@ -25,18 +25,6 @@ jobs:
 
       - name: Build application
         run: |
-          # Уникальные настройки для каждой ОС
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            OUTPUT_NAME="ImageAnnotation"
-            ICON="favicons/favicon.icns"
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            OUTPUT_NAME="ImageAnnotation.exe"
-            ICON="favicons/favicon.ico"
-          else
-            OUTPUT_NAME="ImageAnnotation"
-            ICON=""
-          fi
-
           # Запуск PyInstaller
           pyinstaller build.spec
 
