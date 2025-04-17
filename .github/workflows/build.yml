@@ -38,7 +38,7 @@ jobs:
           fi
 
           # Запуск PyInstaller
-          pyinstaller build.spec --name $OUTPUT_NAME $( [[ -n "$ICON" ]] && echo "--icon $ICON" )
+          pyinstaller build.spec
 
       - name: Prepare artifacts
         run: |
