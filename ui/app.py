@@ -18,7 +18,7 @@ from utils.logger import log_method
 from data_processing.annotation_saver import AnnotationSaver
 from data_processing.image_loader import ImageLoader
 from ui.canvas import AnnotationCanvas
-from utils.paths import DATA_DIR, BASE_DIR
+from utils.paths import DATA_DIR
 
 
 def get_unique_folder_name(source_path: Path) -> str:
@@ -141,10 +141,7 @@ class AnnotationPopover(tk.Toplevel):
         """Копируем в защищенную папку, переименовываем с помощью хэша"""
         folder_path = Path(folder_path)
         if folder_path.exists():
-            if getattr(sys, 'frozen', False):
-                output_dir = DATA_DIR / "annotated_dataset"
-            else:
-                output_dir = BASE_DIR / "annotated_dataset"
+            output_dir = DATA_DIR / "annotated_dataset"
 
             hash_name = get_unique_folder_name(folder_path)
             self.json_manager = JsonManager(
@@ -187,10 +184,8 @@ class AnnotationPopover(tk.Toplevel):
 
     @log_method
     def _load_image(self, direction="next"):
-        if getattr(sys, 'frozen', False):
-            output_dir = DATA_DIR / "annotated_dataset"
-        else:
-            output_dir = BASE_DIR / "annotated_dataset"
+        output_dir = DATA_DIR / "annotated_dataset"
+
         if self.image_loader:
             json_manager = JsonManager(os.path.join(output_dir, 'blazons.json'))
 
@@ -381,10 +376,7 @@ class ImageAnnotationApp:
         ).pack(pady=10)
 
     def get_annotated_datasets(self):
-        if getattr(sys, 'frozen', False):
-            output_dir = DATA_DIR / "annotated_dataset"
-        else:
-            output_dir = BASE_DIR / "annotated_dataset"
+        output_dir = DATA_DIR / "annotated_dataset"
 
         # Очищаем предыдущие датасеты
         for dataset in self.annotated_datasets:
@@ -474,10 +466,8 @@ class ImageAnnotationApp:
             self.annotated_datasets.append(item_frame)
 
     def _translate_from_hash(self, hash_folder: Path):
-        if getattr(sys, 'frozen', False):
-            output_dir = DATA_DIR / "annotated_dataset"
-        else:
-            output_dir = BASE_DIR / "annotated_dataset"
+        output_dir = DATA_DIR / "annotated_dataset"
+
         json_manager = JsonManager(
             os.path.join(output_dir, 'hash_to_name.json')
         )
@@ -486,10 +476,8 @@ class ImageAnnotationApp:
         return real_path
 
     def _get_dataset_stat(self, folder):
-        if getattr(sys, 'frozen', False):
-            output_dir = DATA_DIR / "annotated_dataset"
-        else:
-            output_dir = BASE_DIR / "annotated_dataset"
+        output_dir = DATA_DIR / "annotated_dataset"
+
         json_manager = AnnotationFileManager(
             os.path.join(output_dir, 'annotations.json')
         )
@@ -703,10 +691,7 @@ class ImageAnnotationApp:
             self.root.after(0, self._show_error, str(e))
 
     def _save_google_drive_files(self, files):
-        if getattr(sys, 'frozen', False):
-            output_dir = DATA_DIR / "annotated_dataset"
-        else:
-            output_dir = BASE_DIR / "annotated_dataset"
+        output_dir = DATA_DIR / "annotated_dataset"
 
         for folder, images in files.items():
             real_name = output_dir / (folder + "_drive")

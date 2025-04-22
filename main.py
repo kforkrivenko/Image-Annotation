@@ -8,10 +8,7 @@ from utils.paths import *
 def prepare_env():
     """Создает необходимые директории"""
     (DATA_DIR/"logs").mkdir(exist_ok=True)
-    if not getattr(sys, 'frozen', False):
-        (BASE_DIR / "annotated_dataset").mkdir(exist_ok=True)
-    else:
-        (DATA_DIR / "annotated_dataset").mkdir(exist_ok=True)
+    (DATA_DIR / "annotated_dataset").mkdir(exist_ok=True)
 
 
 if __name__ == "__main__":

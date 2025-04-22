@@ -6,7 +6,7 @@ import io
 import pandas as pd
 from PIL import Image
 import sys
-from utils.paths import DATA_DIR, BASE_DIR
+from utils.paths import DATA_DIR
 
 # Настройки авторизации
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
@@ -14,10 +14,8 @@ FOLDER_ID = "1RvmJMQ-9ru14Jlp5vcX0vDK4l-ShhQZ4"
 
 
 def get_drive_service():
-    if getattr(sys, 'frozen', False):
-        secret = DATA_DIR / "client_secret_heraldy.json"
-    else:
-        secret = BASE_DIR / "client_secret_heraldy.json"
+    secret = DATA_DIR / "client_secret_heraldy.json"
+
     # Файл token.json сохраняет токены доступа и обновления
     try:
         creds = Credentials.from_authorized_user_file('token.json', SCOPES)

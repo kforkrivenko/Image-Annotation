@@ -1,5 +1,4 @@
 from utils.json_manager import AnnotationFileManager
-from .history_manager import DatasetHistoryManager
 import shutil
 from typing import List, Dict
 from models.annotation import Annotation
@@ -8,14 +7,10 @@ from utils.paths import *
 
 class AnnotationSaver:
     def __init__(self, folder_path: str):
-        self.history_manager = DatasetHistoryManager()
         self.source_folder = Path(folder_path)
 
         # Выбираем куда сохранять в зависимости от режима
-        if getattr(sys, 'frozen', False):
-            self.output_dir = DATA_DIR / "annotated_dataset"
-        else:
-            self.output_dir = BASE_DIR / "annotated_dataset"
+        self.output_dir = DATA_DIR / "annotated_dataset"
 
         self.output_dir.mkdir(exist_ok=True)
 
@@ -43,11 +38,6 @@ class AnnotationSaver:
             str(self.source_folder),
             img_name,
             annotations_data
-        )
-
-        self.history_manager.add_dataset(
-            dataset_path=str(self.source_folder),
-            annotations_path=str(self.output_dir)
         )
 
     def _copy_image_to_output(self, src_path: Path):
