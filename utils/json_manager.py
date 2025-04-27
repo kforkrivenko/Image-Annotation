@@ -5,7 +5,7 @@ from models.annotation import Annotation
 
 
 class JsonManager:
-    def __init__(self, file_path: Union[str, Path],  autosave: bool = True):
+    def __init__(self, file_path: Union[str, Path], autosave: bool = True):
         self.file_path = Path(file_path)
         self.autosave = autosave
         self.data = self._load_or_create()
@@ -104,6 +104,5 @@ class AnnotationFileManager(JsonManager):
         """Получить информацию о файле: `info = manager.get_file_info('папка', 'файл')`."""
         return self.data.get(folder, {})
 
-    def __getitem__(self, key: str) -> Dict[str, List[Any]]:
-        """Получить словарь файлов папки: `files = manager['папка']`."""
-        return self.data.setdefault(key, {})
+    def get_data(self):
+        return self.data

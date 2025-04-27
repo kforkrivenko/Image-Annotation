@@ -116,6 +116,21 @@ class AnnotationPopover(tk.Toplevel):
             style="Popover.TLabel"
         ).pack(side=tk.LEFT, padx=10)
 
+        self.entry_var = tk.StringVar()
+        self.image_entry = tk.Entry(
+            control_frame,
+            textvariable=self.entry_var,
+            width=5
+        )
+        self.image_entry.pack(side=tk.LEFT, padx=5)
+
+        self.update_button = tk.Button(
+            control_frame,
+            text="Перейти",
+            command=self._go_to_image
+        )
+        self.update_button.pack(side=tk.LEFT, padx=5)
+
         # Кнопка закрытия
         ttk.Button(
             control_frame,
@@ -123,6 +138,22 @@ class AnnotationPopover(tk.Toplevel):
             style="Popover.TButton",
             command=self.close
         ).pack(side=tk.RIGHT, padx=5, pady=10)
+
+    def _go_to_image(self):
+        """Обновить изображение по номеру, введенному пользователем."""
+        try:
+            # Получаем номер из текстового поля
+            index = int(self.entry_var.get()) - 1  # Номера изображений начинаются с 1, поэтому вычитаем 1
+            if 0 <= index < len(self.image_loader.image_files):
+                self.image_loader.current_index = index
+                self._load_image('current')
+                self._update_status()
+            else:
+                # Если введенный номер вне допустимого диапазона
+                self.status_var.set("Неверный номер изображения!")
+        except ValueError:
+            # Если введено не число
+            self.status_var.set("Введите валидный номер изображения!")
 
     def _copy_to_folder_and_rename(self, folder_path):
         """Копируем в защищенную папку, переименовываем с помощью хэша"""
@@ -373,13 +404,7 @@ class ImageAnnotationApp:
         if not output_dir.exists():
             return
 
-        # Обновление скроллрегиона при изменении содержимого
-        def configure_scrollregion(event):
-            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            if self.scrollable_frame.winfo_reqwidth() < self.canvas.winfo_width():
-                self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), self.canvas.bbox("all")[3]))
-
-        self.scrollable_frame.bind("<Configure>", configure_scrollregion)
+        self.scrollable_frame.bind("<Configure>", lambda _: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
 
         # Панель инструментов
         toolbar = tk.Frame(self.scrollable_frame, bg="#f0f0f0")
@@ -417,9 +442,9 @@ class ImageAnnotationApp:
         json_manager = JsonManager(os.path.join(output_dir, 'hash_to_name.json'))
 
         # Параметры сетки
-        ITEMS_PER_ROW = 3  # Увеличил количество элементов в строке
-        ITEM_WIDTH = 180  # Увеличил ширину элемента
-        PREVIEW_SIZE = 100  # Увеличил размер превью
+        ITEMS_PER_ROW = 3
+        ITEM_WIDTH = 250
+        PREVIEW_SIZE = 150
 
         for i, sub_folder in enumerate(sub_folders):
             real_name = Path(json_manager[sub_folder.name]).name
@@ -477,7 +502,7 @@ class ImageAnnotationApp:
                     img_label = tk.Label(img_container, image=photo, bg="white", cursor="hand2")
                     img_label.image = photo
                     img_label.pack()
-                    img_label.bind("<Button-1>", lambda e, s=sub_folder: self._modify_dataset(s))
+                    img_label.bind("<Button-1>", lambda _, s=sub_folder: self._modify_dataset(s))
                 except Exception as e:
                     print(f"Ошибка загрузки изображения: {e}")
                     no_img = tk.Label(img_container, text="No preview", bg="white", fg="gray")
@@ -492,7 +517,7 @@ class ImageAnnotationApp:
                 cursor="hand2"
             )
             name_label.pack(fill=tk.X, padx=5, pady=(0, 5))
-            name_label.bind("<Button-1>", lambda e, s=sub_folder: self._modify_dataset(s))
+            name_label.bind("<Button-1>", lambda _, s=sub_folder: self._modify_dataset(s))
 
             # Статистика и кнопка удаления
             stat_frame = tk.Frame(item_frame, bg="white")
@@ -555,7 +580,6 @@ class ImageAnnotationApp:
             hash_to_name_manager.save()
 
         self.root.event_generate("<<RefreshDatasets>>")
-
 
     def _select_all_datasets(self):
         """Выбирает или снимает выбор со всех датасетов"""
