@@ -5,8 +5,9 @@ from models.annotation import Annotation
 
 
 class JsonManager:
-    def __init__(self, file_path: Union[str, Path]):
+    def __init__(self, file_path: Union[str, Path],  autosave: bool = True):
         self.file_path = Path(file_path)
+        self.autosave = autosave
         self.data = self._load_or_create()
 
     def values(self):
@@ -34,17 +35,30 @@ class JsonManager:
         return self.data.setdefault(key, None)
 
     def __setitem__(self, key: str, value: Any):
-        """Установить словарь файлов для папки: `manager['папка'] = {'файл': [...]}`."""
         self.data[key] = value
-        self._save()
+        if self.autosave:
+            self._save()
 
     def __delitem__(self, key: str):
-        """Удалить ключ."""
         del self.data[key]
-        self._save()
+        if self.autosave:
+            self._save()
 
     def __repr__(self) -> str:
         return f"JsonManager(file='{self.file_path}', data={self.data})"
+
+    def delete_key(self, key: str):
+        """Удаляет ключ без немедленного сохранения."""
+        if key in self.data:
+            del self.data[key]
+
+    def set_key(self, key: str, value: Any):
+        """Устанавливает значение без немедленного сохранения."""
+        self.data[key] = value
+
+    def save(self):
+        """Явное сохранение всех изменений."""
+        self._save()
 
 
 class AnnotationFileManager(JsonManager):
@@ -93,4 +107,3 @@ class AnnotationFileManager(JsonManager):
     def __getitem__(self, key: str) -> Dict[str, List[Any]]:
         """Получить словарь файлов папки: `files = manager['папка']`."""
         return self.data.setdefault(key, {})
-

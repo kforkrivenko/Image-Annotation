@@ -6,40 +6,27 @@ import tempfile
 import threading
 import tkinter as tk
 from collections import defaultdict
+from datetime import datetime
 from time import sleep
 
 from api.api import get_dataset, get_datasets_info
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 from pathlib import Path
 from PIL import Image, ImageTk
 
+from utils.dataset_deleter import DatasetDeleter
 from utils.json_manager import JsonManager, AnnotationFileManager
 from utils.logger import log_method
 from data_processing.annotation_saver import AnnotationSaver
 from data_processing.image_loader import ImageLoader
 from ui.canvas import AnnotationCanvas
 from utils.paths import DATA_DIR
+from utils.errors import FolderLoadError, NoImagesError
 
 
 def get_unique_folder_name(source_path: Path) -> str:
     unique_str = source_path.name
     return str(hashlib.md5(unique_str.encode()).hexdigest()[:8])
-
-
-class FolderLoadError(Exception):
-    def __init__(self, message="Произошла ошибка загрузки"):
-        self.message = message
-        super().__init__(self.message)
-
-    def show_tkinter_error(self, parent=None):
-        """Отображение ошибки в Tkinter"""
-        messagebox.showerror("Ошибка загрузки", self.message)
-
-
-class NoImagesError(FolderLoadError):
-    def __init__(self):
-        self.message = "В папке нет картинок!"
-        super().__init__(self.message)
 
 
 class AnnotationPopover(tk.Toplevel):
@@ -140,6 +127,7 @@ class AnnotationPopover(tk.Toplevel):
     def _copy_to_folder_and_rename(self, folder_path):
         """Копируем в защищенную папку, переименовываем с помощью хэша"""
         folder_path = Path(folder_path)
+
         if folder_path.exists():
             output_dir = DATA_DIR / "annotated_dataset"
 
@@ -194,10 +182,8 @@ class AnnotationPopover(tk.Toplevel):
                 current_image_path = self.image_loader.get_current_image_path()
                 folder_path = self.image_loader.folder_path
                 hash = str(folder_path).split('/')[-1]
-                print("HEEEERE", folder_path, current_image_path)
 
                 try:
-                    print(json_manager[hash][current_image_path])
                     self.current_blazon = json_manager[hash][current_image_path]
                 except Exception:
                     self.current_blazon = ""
@@ -205,8 +191,6 @@ class AnnotationPopover(tk.Toplevel):
                 self.current_blazon_label.config(
                     text=f"{self.current_blazon}"
                 )
-
-                print("CURRENT", self.current_blazon)
 
                 self.canvas.display_image(img, current_image_path)
                 self._load_existing_annotations(current_image_path)
@@ -258,6 +242,8 @@ class ImageAnnotationApp:
         self.root.title("Image Annotation Tool")
         self._set_window_icon()
         self._setup_ui()
+        self.deleter = DatasetDeleter(self.root)
+        self.root.bind("<<RefreshDatasets>>", lambda e: self.get_annotated_datasets())
 
     def _set_window_icon(self):
         """Устанавливает иконку в зависимости от ОС"""
@@ -382,27 +368,58 @@ class ImageAnnotationApp:
         for dataset in self.annotated_datasets:
             dataset.destroy()
         self.annotated_datasets = []
+        self.selected_datasets = set()  # Для хранения выбранных датасетов
 
         if not output_dir.exists():
             return
 
-            # Обновление скроллрегиона при изменении содержимого
+        # Обновление скроллрегиона при изменении содержимого
         def configure_scrollregion(event):
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            # Ограничиваем минимальную ширину для горизонтального скролла
             if self.scrollable_frame.winfo_reqwidth() < self.canvas.winfo_width():
                 self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), self.canvas.bbox("all")[3]))
 
         self.scrollable_frame.bind("<Configure>", configure_scrollregion)
+
+        # Панель инструментов
+        toolbar = tk.Frame(self.scrollable_frame, bg="#f0f0f0")
+        toolbar.grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 10), padx=5)
+
+        merge_btn = tk.Button(
+            toolbar,
+            text="Объединить выбранные",
+            command=self._merge_selected_datasets,
+            bg="#e1e1e1",
+            relief=tk.FLAT
+        )
+        merge_btn.pack(side=tk.LEFT, padx=5)
+
+        delete_btn = tk.Button(
+            toolbar,
+            text="Удалить выбранные",
+            command=self._delete_selected_datasets,
+            bg="#e1e1e1",
+            relief=tk.FLAT
+        )
+        delete_btn.pack(side=tk.LEFT, padx=5)
+
+        select_all_btn = tk.Button(
+            toolbar,
+            text="Выбрать все",
+            command=self._select_all_datasets,
+            bg="#e1e1e1",
+            relief=tk.FLAT
+        )
+        select_all_btn.pack(side=tk.RIGHT, padx=5)
 
         # Получаем список датасетов
         sub_folders = [f for f in output_dir.iterdir() if f.is_dir()]
         json_manager = JsonManager(os.path.join(output_dir, 'hash_to_name.json'))
 
         # Параметры сетки
-        ITEMS_PER_ROW = 3  # Количество датасетов в строке
-        ITEM_WIDTH = 150  # Ширина одного элемента
-        PREVIEW_SIZE = 80  # Размер превью изображения
+        ITEMS_PER_ROW = 3  # Увеличил количество элементов в строке
+        ITEM_WIDTH = 180  # Увеличил ширину элемента
+        PREVIEW_SIZE = 100  # Увеличил размер превью
 
         for i, sub_folder in enumerate(sub_folders):
             real_name = Path(json_manager[sub_folder.name]).name
@@ -411,59 +428,227 @@ class ImageAnnotationApp:
             item_frame = tk.Frame(
                 self.scrollable_frame,
                 width=ITEM_WIDTH,
-                height=ITEM_WIDTH + 30,
+                height=ITEM_WIDTH + 60,
                 bg="white",
                 bd=1,
-                relief=tk.RAISED
+                relief=tk.RAISED,
+                highlightbackground="#e0e0e0",
+                highlightthickness=1
             )
             item_frame.grid(
-                row=i // ITEMS_PER_ROW,
+                row=(i // ITEMS_PER_ROW) + 1,
                 column=i % ITEMS_PER_ROW,
-                padx=5,
-                pady=5,
+                padx=10,
+                pady=10,
                 sticky="nsew"
             )
-            item_frame.grid_propagate(False)  # Фиксируем размер
+            item_frame.grid_propagate(False)
+
+            # Чекбокс для выбора
+            var = tk.IntVar()
+            chk = tk.Checkbutton(
+                item_frame,
+                variable=var,
+                bg="white",
+                command=lambda f=sub_folder, v=var: self._toggle_dataset_selection(f, v)
+            )
+            chk.var = var  # Сохраняем ссылку на переменную
+            chk.place(x=5, y=5)
+
+            # Инициализируем состояние чекбокса
+            var.set(1 if sub_folder in self.selected_datasets else 0)
+
+            # Контейнер для изображения
+            img_container = tk.Frame(item_frame, bg="white", height=PREVIEW_SIZE + 10)
+            img_container.pack(fill=tk.X, pady=(25, 5))
+            img_container.pack_propagate(False)
 
             # Загрузка превью изображения
-            image_files = (list(sub_folder.glob("*.jpg")) + list(sub_folder.glob("*.jpeg")) +
+            image_files = (list(sub_folder.glob("*.jpg")) +
+                           list(sub_folder.glob("*.jpeg")) +
                            list(sub_folder.glob("*.png")))
+
             if image_files:
                 try:
                     img = Image.open(image_files[0])
                     img.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE))
                     photo = ImageTk.PhotoImage(img)
 
-                    img_label = tk.Label(item_frame, image=photo, bg="white")
+                    img_label = tk.Label(img_container, image=photo, bg="white", cursor="hand2")
                     img_label.image = photo
-                    img_label.pack(pady=2)
+                    img_label.pack()
+                    img_label.bind("<Button-1>", lambda e, s=sub_folder: self._modify_dataset(s))
                 except Exception as e:
                     print(f"Ошибка загрузки изображения: {e}")
+                    no_img = tk.Label(img_container, text="No preview", bg="white", fg="gray")
+                    no_img.pack(pady=20)
 
-            # Кнопка датасета
-            dataset_btn = tk.Button(
+            # Название датасета
+            name_label = tk.Label(
                 item_frame,
                 text=real_name,
-                bg="#e1e1e1",
-                relief=tk.FLAT,
-                width=15,
+                bg="white",
                 wraplength=ITEM_WIDTH - 20,
-                command=lambda sub=sub_folder: self._modify_dataset(sub)
+                cursor="hand2"
             )
+            name_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+            name_label.bind("<Button-1>", lambda e, s=sub_folder: self._modify_dataset(s))
 
-            dataset_btn.pack(fill=tk.X, padx=5, pady=2)
+            # Статистика и кнопка удаления
+            stat_frame = tk.Frame(item_frame, bg="white")
+            stat_frame.pack(fill=tk.X, pady=(0, 5))
 
             annotated_imgs, imgs = self._get_dataset_stat(sub_folder)
-
-            # Статистика разметки
             stat_label = tk.Label(
-                item_frame,
-                text=f"{annotated_imgs}/{imgs}",
-                bg="white"
+                stat_frame,
+                text=f"Аннотировано: {annotated_imgs}/{imgs}",
+                bg="white",
+                font=("Arial", 8)
             )
-            stat_label.pack(pady=2)
+            stat_label.pack(side=tk.LEFT, padx=5)
+
+            # Кнопка редактирования (карандаш)
+            edit_btn = tk.Button(
+                stat_frame,
+                text="✏️",
+                fg="blue",
+                bg="white",
+                bd=0,
+                font=("Arial", 12, "bold"),
+                command=lambda s=sub_folder: self._edit_dataset(s)
+            )
+            edit_btn.pack(side=tk.RIGHT, padx=5)
+
+            # Кнопка удаления (крестик)
+            del_btn = tk.Button(
+                stat_frame,
+                text="×",
+                fg="red",
+                bg="white",
+                bd=0,
+                font=("Arial", 12, "bold"),
+                command=lambda s=sub_folder: self._delete_single_dataset(s)
+            )
+            del_btn.pack(side=tk.RIGHT, padx=5)
 
             self.annotated_datasets.append(item_frame)
+
+    def _toggle_dataset_selection(self, dataset, var):
+        """Переключает выбор датасета"""
+        if var.get() == 1:
+            self.selected_datasets.add(dataset)
+        else:
+            self.selected_datasets.discard(dataset)
+
+    def _edit_dataset(self, dataset):
+        output_dir = DATA_DIR / "annotated_dataset"
+        hash_to_name_path = output_dir / 'hash_to_name.json'
+        hash_to_name_manager = JsonManager(hash_to_name_path)
+
+        current_value = Path(hash_to_name_manager[dataset.name]).name
+        new_value = simpledialog.askstring("Редактирование", "Введите новое значение:", initialvalue=current_value)
+        if new_value:
+            # Обработка нового значения
+            print(f"Новый введенный текст: {new_value}")
+
+            hash_to_name_manager[dataset.name] = new_value
+            hash_to_name_manager.save()
+
+        self.root.event_generate("<<RefreshDatasets>>")
+
+
+    def _select_all_datasets(self):
+        """Выбирает или снимает выбор со всех датасетов"""
+        # Проверяем текущее состояние (если хотя бы один не выбран - выбираем все)
+        select_all = not all(dataset in self.selected_datasets for dataset in self._get_all_dataset_folders())
+
+        # Получаем все датасеты
+        all_datasets = self._get_all_dataset_folders()
+
+        if select_all:
+            self.selected_datasets = set(all_datasets)
+        else:
+            self.selected_datasets = set()
+
+        # Обновляем чекбоксы во всех фреймах датасетов
+        for widget in self.scrollable_frame.winfo_children():
+            if isinstance(widget, tk.Frame):
+                for child in widget.winfo_children():
+                    if isinstance(child, tk.Checkbutton):
+                        child.var.set(1 if select_all else 0)
+
+    def _get_all_dataset_folders(self):
+        """Возвращает список всех папок с датасетами"""
+        output_dir = DATA_DIR / "annotated_dataset"
+        return [f for f in output_dir.iterdir() if f.is_dir()] if output_dir.exists() else []
+
+    def _merge_selected_datasets(self):
+        if not self.selected_datasets:
+            return
+
+        confirm = messagebox.askyesno(
+            "Подтверждение",
+            f"Объединить {len(self.selected_datasets)} датасетов в один?",
+            parent=self.root
+        )
+        if not confirm:
+            return
+
+        # Куда объединять
+        output_dir = DATA_DIR / "annotated_dataset"
+        annotations_path = output_dir / 'annotations.json'
+        hash_to_name_path = output_dir / 'hash_to_name.json'
+        annotations_manager = JsonManager(annotations_path)
+        hash_to_name_manager = JsonManager(hash_to_name_path)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        merged_folder = output_dir / f"merged_{timestamp}"
+
+        merged_folder_path = str(merged_folder)
+
+        hash_merged_folder_path = get_unique_folder_name(merged_folder)
+        hash_to_name_manager[hash_merged_folder_path] = merged_folder_path
+        merged_folder_path = str(output_dir / hash_merged_folder_path)
+        Path(merged_folder_path).mkdir(parents=True, exist_ok=True)
+
+        try:
+            for dataset in self.selected_datasets:
+                if not dataset.exists() or not dataset.is_dir():
+                    continue
+
+                for item in dataset.iterdir():
+                    dest = Path(merged_folder_path) / item.name
+                    if item.is_dir():
+                        shutil.copytree(item, dest, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(item, dest)
+
+                dataset_path = str(output_dir / dataset.name)
+
+                if merged_folder_path not in annotations_manager.keys():
+                    if dataset_path in annotations_manager.keys() and annotations_manager[dataset_path] is not None:
+                        annotations_manager[merged_folder_path] = annotations_manager[dataset_path]
+                    else:
+                        annotations_manager[merged_folder_path] = {}
+                else:
+                    if dataset_path in annotations_manager.keys() and annotations_manager[dataset_path] is not None:
+                        annotations_manager[merged_folder_path] = (annotations_manager[merged_folder_path] |
+                                                                   annotations_manager[dataset_path])
+
+            annotations_manager.save()
+            self.root.event_generate("<<RefreshDatasets>>")
+            messagebox.showinfo("Готово", f"Датасеты объединены в папку:\n{merged_folder}", parent=self.root)
+
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка при объединении: {str(e)}", parent=self.root)
+
+    def _delete_single_dataset(self, dataset_folder):
+        self.deleter.delete_datasets([dataset_folder])
+
+    def _delete_selected_datasets(self):
+        if not self.selected_datasets:
+            messagebox.showwarning("Внимание", "Не выбраны датасеты для удаления")
+            return
+        self.deleter.delete_datasets(list(self.selected_datasets))
 
     def _translate_from_hash(self, hash_folder: Path):
         output_dir = DATA_DIR / "annotated_dataset"
@@ -492,7 +677,6 @@ class ImageAnnotationApp:
         return annotated_imgs, imgs
 
     def _modify_dataset(self, folder_path):
-        print(folder_path)
         popover = AnnotationPopover(self.root, self)
 
         # Центрируем Popover относительно главного окна
@@ -654,7 +838,6 @@ class ImageAnnotationApp:
 
             images_from_google_drive = defaultdict(list[tuple])
 
-            i = 0
             for i, (blazon, image, name, region) in enumerate(dataset_iterator):
                 if self.processing_cancelled or not window_active:
                     break  # Прерываем цикл при отмене

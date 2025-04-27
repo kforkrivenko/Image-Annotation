@@ -20,35 +20,6 @@ class AnnotationSaver:
 
         self.annotations_file = self.output_dir / "annotations.json"
 
-    def save_annotations(self, image_path: str, annotations: List[Annotation]):
-        # Получаем полный путь к исходному изображению
-        full_image_path = self.source_folder / Path(image_path).name
-        img_name = full_image_path.name
-
-        self._copy_image_to_output(full_image_path)
-
-        annotations_data = [ann.to_dict() for ann in annotations]
-
-        self.json_manager.delete_file(
-            str(self.source_folder),
-            img_name
-        )
-
-        self.json_manager.add_file_info(
-            str(self.source_folder),
-            img_name,
-            annotations_data
-        )
-
-    def _copy_image_to_output(self, src_path: Path):
-        if not src_path.exists():
-            return
-
-        dst_path = self.output_dir / "images" / src_path.name
-
-        if not dst_path.exists():
-            shutil.copy2(src_path, dst_path)
-
     def get_annotations(self, image_path: str) -> List[Annotation]:
         img_name = Path(image_path).name
         return [
