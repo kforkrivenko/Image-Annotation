@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import simpledialog
 from PIL import Image, ImageTk
-from models.annotation import Annotation
+from utils.annotation import Annotation
 from utils.logger import log_method
 
 

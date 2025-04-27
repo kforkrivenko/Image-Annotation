@@ -7,6 +7,8 @@ import tkinter as tk
 from collections import defaultdict
 from datetime import datetime
 from time import sleep
+import torch
+from ultralytics import YOLO
 
 from api.api import get_dataset, get_datasets_info
 from tkinter import ttk, filedialog, messagebox, simpledialog
@@ -14,11 +16,34 @@ from pathlib import Path
 from PIL import Image, ImageTk
 
 from data_processing.annotation_popover import AnnotationPopover, get_unique_folder_name
+from ml.yolo import ensure_model_downloaded, prepare_yolo_dataset
 from utils.dataset_deleter import DatasetDeleter
 from utils.json_manager import JsonManager, AnnotationFileManager
 
 from utils.paths import DATA_DIR
 from utils.errors import FolderLoadError, NoImagesError
+
+
+class TextRedirector:
+    """Безопасное перенаправление вывода в текстовый виджет"""
+
+    def __init__(self, text_widget):
+        self.text_widget = text_widget
+        self.root = text_widget._root()  # Получаем корневое окно
+
+    def write(self, string):
+        def safe_write():
+            if self.text_widget.winfo_exists():  # Проверяем, существует ли виджет
+                self.text_widget.insert(tk.END, string)
+                self.text_widget.see(tk.END)
+
+        try:
+            self.root.after(0, safe_write)  # Запланировать в основном потоке
+        except:
+            pass  # Игнорируем ошибки, если окно уже закрыто
+
+    def flush(self):
+        pass
 
 
 def get_resource_path(relative_path):
@@ -40,7 +65,7 @@ def get_resource_path(relative_path):
 class ImageAnnotationApp:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.geometry("1200x800")
+        self.root.geometry("1600x1200")
         self.root.title("Image Annotation Tool")
         self._set_window_icon()
         self._setup_ui()
@@ -51,10 +76,9 @@ class ImageAnnotationApp:
         """Устанавливает иконку в зависимости от ОС"""
         try:
             if sys.platform == 'darwin':  # macOS
-                # Для .icns на macOS используем специальный метод
                 icns_path = get_resource_path('favicons/favicon.icns')
                 if os.path.exists(icns_path):
-                    # Создаем временный .png для tkinter (на MacOS лучше работает через iconphoto)
+                    # Создаем временный .png для tkinter
                     temp_png = os.path.join(tempfile.gettempdir(), 'temp_icon.png')
 
                     # Конвертируем .icns в .png если нужно
@@ -162,6 +186,516 @@ class ImageAnnotationApp:
             font=("Arial", 12),
             bg="white"
         ).pack(pady=10)
+
+        # --- Правая часть (дообучение) ---
+
+        # Блок выбора модели
+        self.model_frame = tk.Frame(self.right_frame, bg="white")
+        self.model_frame.pack(fill=tk.X, padx=20, pady=10)
+
+        tk.Label(
+            self.model_frame,
+            text="Выбор модели:",
+            bg="white",
+            font=("Arial", 10)
+        ).pack(anchor="w")
+
+        self.available_models = self._get_available_models()
+        self.model_var = tk.StringVar(value=(self.available_models[0] if self.available_models else ""))
+
+        self.model_selector = ttk.Combobox(
+            self.model_frame,
+            textvariable=self.model_var,
+            values=self.available_models,
+            state="readonly" if self.available_models else "disabled"
+        )
+        self.model_selector.pack(fill=tk.X, pady=5)
+
+        # Блок кнопок скачивания (всегда видим)
+        download_frame = tk.Frame(self.model_frame, bg="white")
+        download_frame.pack(fill=tk.X, pady=10)
+
+        tk.Label(
+            download_frame,
+            text="Скачать модели:",
+            bg="white",
+            font=("Arial", 9)
+        ).pack(anchor="w", pady=(0, 5))
+
+        tk.Button(
+            download_frame,
+            text="YOLOv8n",
+            command=lambda: self._download_model("yolov8n"),
+            bg="#e1e1e1"
+        ).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(
+            download_frame,
+            text="YOLOv8s",
+            command=lambda: self._download_model("yolov8s"),
+            bg="#e1e1e1"
+        ).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(
+            download_frame,
+            text="YOLOv8m",
+            command=lambda: self._download_model("yolov8m"),
+            bg="#e1e1e1"
+        ).pack(side=tk.LEFT, padx=5)
+
+        # Кнопка запуска обучения
+        train_button = tk.Button(
+            self.right_frame,
+            text="Обучить на выбранных датасетах",
+            command=self._open_training_popup,
+            bg="#4CAF50",
+            font=("Arial", 12, "bold")
+        )
+        train_button.pack(pady=20, ipadx=10, ipady=5)
+
+    def _get_available_models(self):
+        """Проверяет наличие скачанных моделей."""
+        models_dir = DATA_DIR / "models"
+        if not models_dir.exists():
+            return []
+
+        models = list([f.name for f in models_dir.glob("*.pt")])
+        models_trained = list([f.parent.parent.name + "/" + f.name for f in Path(DATA_DIR).glob("**/best.pt")])
+        return models + models_trained
+
+    def _download_model(self, model_name):
+        """Имитация скачивания модели."""
+        _ = ensure_model_downloaded(model_name)
+        #  model = YOLO(model_path)
+
+        messagebox.showinfo("Модель загружена", f"Модель {model_name} успешно скачана.")
+        self._refresh_right_panel()
+
+    def _refresh_right_panel(self):
+        """Перестраивает правую панель после загрузки модели."""
+
+        # Очищаем старое содержимое
+        for widget in self.model_frame.winfo_children():
+            widget.destroy()
+
+        # Заново получаем список моделей
+        self.available_models = self._get_available_models()
+
+        # Заголовок "Выбор модели"
+        tk.Label(
+            self.model_frame,
+            text="Выбор модели:",
+            bg="white",
+            font=("Arial", 10)
+        ).pack(anchor="w")
+
+        # Комбобокс выбора модели
+        self.model_var = tk.StringVar(value=(self.available_models[0] if self.available_models else ""))
+        self.model_selector = ttk.Combobox(
+            self.model_frame,
+            textvariable=self.model_var,
+            values=self.available_models,
+            state="readonly" if self.available_models else "disabled"
+        )
+        self.model_selector.pack(fill=tk.X, pady=5)
+
+        # Блок кнопок скачивания (ВСЕГДА)
+        download_frame = tk.Frame(self.model_frame, bg="white")
+        download_frame.pack(fill=tk.X, pady=10)
+
+        tk.Label(
+            download_frame,
+            text="Скачать модели:",
+            bg="white",
+            font=("Arial", 9)
+        ).pack(anchor="w", pady=(0, 5))
+
+        tk.Button(
+            download_frame,
+            text="YOLOv8n",
+            command=lambda: self._download_model("yolov8n"),
+            bg="#e1e1e1"
+        ).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(
+            download_frame,
+            text="YOLOv8s",
+            command=lambda: self._download_model("yolov8s"),
+            bg="#e1e1e1"
+        ).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(
+            download_frame,
+            text="YOLOv8m",
+            command=lambda: self._download_model("yolov8m"),
+            bg="#e1e1e1"
+        ).pack(side=tk.LEFT, padx=5)
+
+        self.annotated_datasets = []
+        self.get_annotated_datasets()
+
+    def _open_training_popup(self):
+        """Открывает окно настроек обучения"""
+        if not self.selected_datasets:
+            messagebox.showwarning("Внимание", "Не выбраны датасеты для обучения")
+            return
+
+        popup = tk.Toplevel(self.root)
+        popup.title("Настройки обучения")
+        popup.geometry("400x500")
+
+        tk.Label(popup, text="Параметры обучения:", font=("Arial", 12, "bold")).pack(pady=10)
+
+        # Параметры
+        params_frame = tk.Frame(popup)
+        params_frame.pack(pady=10)
+
+        tk.Label(params_frame, text="Batch Size:").grid(row=0, column=0, sticky="e", padx=5, pady=5)
+        batch_entry = tk.Entry(params_frame)
+        batch_entry.insert(0, "16")
+        batch_entry.grid(row=0, column=1, padx=5, pady=5)
+
+        tk.Label(params_frame, text="Epochs:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
+        epoch_entry = tk.Entry(params_frame)
+        epoch_entry.insert(0, "100")
+        epoch_entry.grid(row=1, column=1, padx=5, pady=5)
+
+        tk.Label(params_frame, text="Imgs size:").grid(row=2, column=0, sticky="e", padx=5, pady=5)
+        imgsz_entry = tk.Entry(params_frame)
+        imgsz_entry.insert(0, "640")
+        imgsz_entry.grid(row=2, column=1, padx=5, pady=5)
+
+        tk.Label(params_frame, text="Workers:").grid(row=3, column=0, sticky="e", padx=5, pady=5)
+        workers_entry = tk.Entry(params_frame)
+        workers_entry.insert(0, "0")
+        workers_entry.grid(row=3, column=1, padx=5, pady=5)
+
+        tk.Label(params_frame, text="Модель:").grid(row=4, column=0, sticky="e", padx=5, pady=5)
+        model_label = tk.Label(params_frame, text=self.model_var.get())
+        model_label.grid(row=4, column=1, padx=5, pady=5)
+
+        tk.Label(params_frame, text="Ваше имя модели:").grid(row=5, column=0, sticky="e", padx=5, pady=5)
+        model_name_entry = tk.Entry(params_frame)
+        model_name_entry.insert(0, self.model_var.get().replace('.pt', '') + "_custom")
+        model_name_entry.grid(row=5, column=1, padx=5, pady=5)
+
+        # Выбор устройства
+        tk.Label(params_frame, text="Устройства:", font=("Arial", 12, "bold")).grid(row=6, column=0, sticky="e", padx=5, pady=5)
+
+        def get_available_devices():
+            # Проверяем доступность GPU, если доступно - добавляем в список
+            devices = ["cpu"]  # Всегда доступен CPU
+
+            if torch.cuda.is_available():
+                # Если доступен GPU, добавляем его в список
+                devices.append(f"cuda")
+
+            if torch.backends.mps.is_available():
+                # Если доступен MPS, добавляем его в список
+                devices.append(f"mps")
+
+            return devices
+
+        device_var = tk.StringVar(value="cpu")
+        device_menu = ttk.Combobox(params_frame, textvariable=device_var, values=get_available_devices(),
+                                   state="readonly")
+        device_menu.grid(row=6, column=1, padx=5, pady=5)
+
+        # Выбор классов
+        tk.Label(popup, text="Выбор классов:", font=("Arial", 12, "bold")).pack(pady=10)
+
+        classes_frame = tk.Frame(popup)
+        classes_frame.pack()
+
+        class_vars = {}
+
+        output_dir = DATA_DIR / "annotated_dataset"
+        annotation_manager = AnnotationFileManager(os.path.join(output_dir, 'annotations.json'))
+
+        classes = set()
+        for dataset in self.selected_datasets:
+            for anns in annotation_manager[str(output_dir / dataset.name)].values():
+                for ann in anns:
+                    classes.add(ann['text'])
+        for i, class_name in enumerate(classes):
+            var = tk.BooleanVar(value=True)
+            cb = tk.Checkbutton(classes_frame, text=class_name, variable=var)
+            cb.grid(row=i, column=0, sticky="w", padx=10, pady=2)
+            class_vars[class_name] = var
+
+        # Кнопка запуска обучения
+        tk.Button(
+            popup,
+            text="Начать обучение",
+            bg="#4CAF50",
+            font=("Arial", 12, "bold"),
+            command=lambda: self._start_training(
+                popup,
+                batch_entry.get(),
+                epoch_entry.get(),
+                imgsz_entry.get(),
+                workers_entry.get(),
+                model_name_entry.get(),
+                device_var.get(),
+                class_vars,
+                self.selected_datasets
+            )
+        ).pack(pady=20)
+
+        # Создаем текстовый виджет для вывода
+        self.train_output = tk.Text(popup, height=15, wrap=tk.WORD)
+        self.train_output.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Прогресс бар
+        self.train_progress = ttk.Progressbar(popup, orient=tk.HORIZONTAL, length=300, mode='determinate')
+        self.train_progress.pack(pady=5)
+
+        # Метка для статуса
+        self.train_status = tk.Label(popup, text="Готов к обучению...")
+        self.train_status.pack()
+
+    def _start_training(self, popup, batch, epochs, imgsz, workers, model_name, device, class_vars, datasets):
+        """Запускает обучение в отдельном потоке"""
+        self.training_cancelled = False
+        try:
+            batch = int(batch)
+            epochs = int(epochs)
+            imgsz = int(imgsz)
+            workers = int(workers)
+        except Exception as e:
+            self._show_error(f"Неверный формат: {e}")
+            return
+
+        if not self.model_var:
+            self._show_error("Не выбрана модель")
+            return
+
+        # Создаем окно для отображения прогресса
+        self._create_training_window(popup)
+
+        # Подготовка данных в основном потоке (это быстро)
+        selected_classes = [name for name, var in class_vars.items() if var.get()]
+        selected_datasets = [dataset.name for dataset in datasets]
+
+        JSON_PATH = DATA_DIR / "annotated_dataset/annotations.json"
+        IMAGES_DIR = DATA_DIR / "annotated_dataset"
+
+        self._update_train_status("Подготовка датасета...")
+        prepare_yolo_dataset(
+            json_path=JSON_PATH,
+            images_source_dir=IMAGES_DIR,
+            dir_names=selected_datasets,
+            output_base_dir=str(DATA_DIR / "data" / model_name),
+            class_names=selected_classes,
+            train_ratio=0.8,
+            seed=42,
+            default_img_ext=".jpg",
+            copy_files=True
+        )
+
+        # Запускаем обучение в отдельном потоке
+        self.training_thread = threading.Thread(
+            target=self._run_training,
+            args=(batch, epochs, imgsz, workers, model_name, device),
+            daemon=True
+        )
+        self.training_thread.start()
+
+    def _create_training_window(self, parent):
+        """Создает окно для отображения прогресса обучения"""
+        self.train_window = tk.Toplevel(parent)
+        self.train_window.title("Процесс обучения")
+        self.train_window.geometry("800x600")
+
+        # Текстовый вывод
+        self.train_output = tk.Text(self.train_window, wrap=tk.WORD)
+        self.train_output.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Прогресс-бар
+        self.train_progress = ttk.Progressbar(self.train_window, orient=tk.HORIZONTAL, length=300, mode='determinate')
+        self.train_progress.pack(pady=5)
+
+        # Статус
+        self.train_status = tk.Label(self.train_window, text="Готов к обучению...")
+        self.train_status.pack()
+
+        # Кнопка отмены
+        tk.Button(
+            self.train_window,
+            text="Отменить обучение",
+            command=self._cancel_training,
+            bg="#ff6666"
+        ).pack(pady=10)
+
+        # Перенаправляем вывод
+        sys.stdout = TextRedirector(self.train_output)
+        sys.stderr = TextRedirector(self.train_output)
+
+    def _update_train_status(self, message, success=False, error=False):
+        """Обновляет статус обучения"""
+
+        def update():
+            self.train_status.config(text=message)
+            if success:
+                self.train_status.config(fg="green")
+            elif error:
+                self.train_status.config(fg="red")
+            else:
+                self.train_status.config(fg="black")
+
+        self.root.after(0, update)
+
+    def _cancel_training(self):
+        """Безопасная отмена обучения"""
+        if hasattr(self, 'training_thread') and self.training_thread.is_alive():
+            if messagebox.askyesno("Отмена", "Прервать обучение?", parent=self.train_window):
+                self.training_cancelled = True
+                self._safe_update_status("Обучение прерывается...", warning=True)
+
+                # Пытаемся корректно закрыть окно через 1 секунду
+                self.root.after(1000, self._safe_finalize_training)
+
+    def _run_training(self, batch, epochs, imgsz, workers, model_name, device):
+        """Выполняет обучение модели с безопасным обновлением UI"""
+        try:
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            self._safe_update_status("Загрузка модели...")
+            model = YOLO(DATA_DIR / 'models' / self.model_var.get())
+
+            self._safe_update_status("Начинаем обучение...")
+            self._safe_set_progress_max(epochs)
+
+            for epoch in range(epochs):
+                if getattr(self, 'training_cancelled', False):
+                    self._safe_update_status("Обучение прервано", warning=True)
+                    break
+
+                self._safe_update_status(f"Эпоха {epoch}/{epochs}")
+                self._safe_set_progress(epoch + 1)
+
+                custom_project_dir = DATA_DIR / "data" / model_name / "result"
+
+                results = model.train(
+                    data=str(DATA_DIR / "data" / model_name / 'data.yaml'),
+                    epochs=1,
+                    batch=batch,
+                    imgsz=imgsz,
+                    device=device,
+                    workers=workers,
+                    name=model_name,
+                    pretrained=True,
+                    optimizer='AdamW',
+                    verbose=True,
+                    project=str(custom_project_dir),  # Указываем кастомный путь
+                    exist_ok=True  # Разрешаем перезапись
+                )
+
+            if not getattr(self, 'training_cancelled', False):
+                self._safe_update_status("Обучение завершено!", success=True)
+
+        except Exception as e:
+            self._safe_update_status(f"Ошибка: {str(e)}", error=True)
+        finally:
+            # Корректное освобождение ресурсов
+            if model is not None:
+                try:
+                    model.model.cpu()  # Переводим модель на CPU перед удалением
+                    del model
+                except:
+                    pass
+
+            # Очистка памяти
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            # Принудительный сборщик мусора
+            import gc
+            gc.collect()
+
+            # Восстановление стандартных потоков
+            sys.stdout = sys.__stdout__
+            sys.stderr = sys.__stderr__
+
+            self._safe_finalize_training()
+
+    def _safe_update_status(self, message, success=False, error=False, warning=False):
+        """Безопасное обновление статуса"""
+
+        def update():
+            if hasattr(self, 'train_status') and self.train_status.winfo_exists():
+                self.train_status.config(text=message)
+                if success:
+                    self.train_status.config(fg="green")
+                elif error:
+                    self.train_status.config(fg="red")
+                elif warning:
+                    self.train_status.config(fg="orange")
+                else:
+                    self.train_status.config(fg="black")
+
+        try:
+            self.root.after(0, update)
+        except:
+            pass
+
+    def _safe_set_progress(self, value):
+        """Безопасное обновление прогресс-бара"""
+
+        def update():
+            if hasattr(self, 'train_progress') and self.train_progress.winfo_exists():
+                self.train_progress["value"] = value
+
+        try:
+            self.root.after(0, update)
+        except:
+            pass
+
+    def _safe_set_progress_max(self, max_value):
+        """Безопасная установка максимума прогресс-бара"""
+
+        def update():
+            if hasattr(self, 'train_progress') and self.train_progress.winfo_exists():
+                self.train_progress["maximum"] = max_value
+
+        try:
+            self.root.after(0, update)
+        except:
+            pass
+
+    def _safe_finalize_training(self):
+        """Безопасное завершение обучения"""
+
+        def finalize():
+            if hasattr(self, 'train_window') and self.train_window.winfo_exists():
+                if not getattr(self, 'training_cancelled', False):
+                    messagebox.showinfo("Готово", "Обучение модели завершено!", parent=self.train_window)
+                self.train_window.destroy()
+
+        try:
+            self.root.after(0, finalize)
+        except:
+            pass
+
+    def _update_train_status(self, message, success=False, error=False):
+        """Обновляет статус обучения в UI"""
+
+        def update():
+            self.train_status.config(text=message)
+            if success:
+                self.train_status.config(fg="green")
+            elif error:
+                self.train_status.config(fg="red")
+            else:
+                self.train_status.config(fg="black")
+
+        # Выполняем обновление в основном потоке
+        self.root.after(0, update)
 
     def get_annotated_datasets(self):
         output_dir = DATA_DIR / "annotated_dataset"

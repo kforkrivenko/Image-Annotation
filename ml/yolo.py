@@ -1,5 +1,7 @@
 import os
 import shutil
+import urllib.request
+
 import yaml
 import json
 from pathlib import Path
@@ -13,6 +15,18 @@ from PIL import Image, ImageDraw, ImageFont
 
 from utils.paths import DATA_DIR
 import re
+
+
+def ensure_model_downloaded(model_name: str):
+    model_path = DATA_DIR / "models" / (model_name + '.pt')
+
+    if not model_path.exists():
+        print(f"Скачиваем модель {model_name}...")
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        url = f"https://github.com/ultralytics/assets/releases/latest/download/{model_name}.pt"
+        urllib.request.urlretrieve(url, model_path)
+
+    return str(model_path)
 
 
 def decode_unicode_escape(text):

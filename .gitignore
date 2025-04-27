@@ -11,11 +11,15 @@ annotated_dataset/
 annotation_dictionary.json
 annotations.json
 dataset_history.json
+dataset_preparation.log
 .idea/
 dist/
+data/
+runs/
 build/
 .DS_Store
 *.rtf
 token.json
 notebooks
 client_secret_heraldy.json
+models/

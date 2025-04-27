@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from typing import Any, Union, Dict, List
-from models.annotation import Annotation
+from utils.annotation import Annotation
 
 
 class JsonManager:

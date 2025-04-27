@@ -1,7 +1,6 @@
 from utils.json_manager import AnnotationFileManager
-import shutil
-from typing import List, Dict
-from models.annotation import Annotation
+from typing import List
+from utils.annotation import Annotation
 from utils.paths import *
 
 

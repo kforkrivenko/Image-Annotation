@@ -30,11 +30,13 @@ class ImageLoader:
         annotation_manager = AnnotationFileManager(os.path.join(output_dir, 'annotations.json'))
 
         for i, image_file in enumerate(images_files):
-            if image_file not in annotation_manager[str(self.folder_path)].keys():
+            if (str(self.folder_path) in annotation_manager.keys() and
+                    image_file not in annotation_manager[str(self.folder_path)].keys()):
                 self.current_index = i - 1
                 break
             else:
-                if not annotation_manager[str(self.folder_path)][image_file]:
+                if (str(self.folder_path) in annotation_manager.keys() and
+                        not annotation_manager[str(self.folder_path)][image_file]):
                     self.current_index = i - 1
                     break
 
