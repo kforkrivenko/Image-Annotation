@@ -152,7 +152,6 @@ class AnnotationCanvas(tk.Canvas):
         self._draw_image(image, image_path)
 
     def _draw_image(self, image, image_path):
-        print(type(image))
         img_width, img_height = image.size
         self.ratio = min(800 / img_width, 600 / img_height)
         new_size = (int(img_width * self.ratio), int(img_height * self.ratio))
@@ -166,8 +165,6 @@ class AnnotationCanvas(tk.Canvas):
 
     @log_method
     def _draw_image_path(self, image_path):
-        print(image_path)
-
         self.create_text(
             10, 10,
             anchor=tk.NW,
@@ -198,6 +195,10 @@ class AnnotationCanvas(tk.Canvas):
             return
 
         coords = self.coords(self.current_rect)
+
+        if (coords[0] == coords[2]) or (coords[1] == coords[3]):
+            self.delete(self.current_rect)
+            return
         if self.default_label is not None:
             label = self.default_label
         else:
@@ -214,6 +215,9 @@ class AnnotationCanvas(tk.Canvas):
     def _create_annotation(self, coords, label, rect):
         x_center = (coords[0] + coords[2]) / 2
         y_center = (coords[1] + coords[3]) / 2
+
+        if coords[0] == coords[2] or coords[1] == coords[3]:
+            return
 
         text_id = self.create_text(
             x_center, y_center,

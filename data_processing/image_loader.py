@@ -31,9 +31,12 @@ class ImageLoader:
 
         for i, image_file in enumerate(images_files):
             if image_file not in annotation_manager[str(self.folder_path)].keys():
-                print("image_file", image_file, i)
                 self.current_index = i - 1
                 break
+            else:
+                if not annotation_manager[str(self.folder_path)][image_file]:
+                    self.current_index = i - 1
+                    break
 
     @log_method
     def get_image(self, direction: str = "next") -> Optional[Image.Image]:
