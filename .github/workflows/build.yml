@@ -20,12 +20,12 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install pyinstaller
           pip install -r requirements.txt
 
       - name: Build application
         run: |
-          # Запуск PyInstaller
           pyinstaller build.spec
 
       - name: Package artifacts
@@ -34,25 +34,26 @@ jobs:
           if [[ "$RUNNER_OS" == "macOS" ]]; then
             echo "Packaging macOS app..."
             if [[ -d "ImageAnnotation.app" ]]; then
-              zip -r ImageAnnotation-macOS.zip ImageAnnotation.app
+              # Упаковать всю .app в zip
+              ditto -c -k --sequesterRsrc --keepParent ImageAnnotation.app ImageAnnotation-macOS.zip
             else
               echo "::error::macOS app bundle not found!"
               exit 1
             fi
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             echo "Packaging Windows app..."
-            if [[ -f "ImageAnnotation.exe" ]]; then
-              powershell Compress-Archive -Path ImageAnnotation.exe -DestinationPath ImageAnnotation-Windows.zip
+            if [[ -d "ImageAnnotation" ]]; then
+              powershell Compress-Archive -Path ImageAnnotation -DestinationPath ImageAnnotation-Windows.zip
             else
-              echo "::error::Windows executable not found!"
+              echo "::error::Windows folder not found!"
               exit 1
             fi
           else
             echo "Packaging Linux app..."
-            if [[ -f "ImageAnnotation" ]]; then
+            if [[ -d "ImageAnnotation" ]]; then
               tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation
             else
-              echo "::error::Linux executable not found!"
+              echo "::error::Linux folder not found!"
               exit 1
             fi
           fi
@@ -65,13 +66,11 @@ jobs:
           path: |
             dist/*.zip
             dist/*.tar.gz
-            dist/*.app/**  # Для macOS
 
       - name: Create Release (only on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            dist/ImageAnnotation*.zip
-            dist/ImageAnnotation*.tar.gz
-            dist/*.app/**  # Для macOS
+            dist/*.zip
+            dist/*.tar.gz
