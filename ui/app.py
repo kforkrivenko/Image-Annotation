@@ -374,10 +374,16 @@ class ImageAnnotationApp:
         model_label = tk.Label(params_frame, text=self.model_var.get())
         model_label.grid(row=4, column=1, padx=5, pady=5)
 
+        def validate_char(entry_text):
+            return "/" not in entry_text
+
+        vcmd = (self.root.register(validate_char), '%P')
         tk.Label(params_frame, text="Ваше имя модели:").grid(row=5, column=0, sticky="e", padx=5, pady=5)
-        model_name_entry = tk.Entry(params_frame)
-        model_name_entry.insert(0, self.model_var.get().replace('.pt', '') + "_custom")
+        model_name_entry = tk.Entry(params_frame, validate="key", validatecommand=vcmd)
         model_name_entry.grid(row=5, column=1, padx=5, pady=5)
+        model_name_entry.configure(validate="none")
+        model_name_entry.insert(0, self.model_var.get().replace('.pt', '')[:8] + "_custom")
+        model_name_entry.configure(validate="key")
 
         # Выбор устройства
         tk.Label(params_frame, text="Устройства:", font=("Arial", 12, "bold")).grid(row=6, column=0, sticky="e", padx=5, pady=5)
@@ -564,7 +570,11 @@ class ImageAnnotationApp:
                 torch.cuda.empty_cache()
 
             self._safe_update_status("Загрузка модели...")
-            model = YOLO(DATA_DIR / 'models' / self.model_var.get())
+            model_variant = self.model_var.get()
+            if "/" in model_variant:
+                model = YOLO(DATA_DIR / 'data' / model_variant.split("/")[0] / "weights" / "best.pt")
+            else:
+                model = YOLO(DATA_DIR / 'models' / model_variant)
 
             self._safe_update_status("Начинаем обучение...")
             self._safe_set_progress_max(epochs)
