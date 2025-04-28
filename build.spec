@@ -1,19 +1,18 @@
 # -*- mode: python -*-
-from PyInstaller.utils.hooks import collect_all
 import os
 import sys
 import platform
+from PyInstaller.utils.hooks import collect_all
 
 # ========================================================
-# 1. Настройка путей и зависимостей
+# 1. Функция поиска libpython (для Mac и Linux)
 # ========================================================
 
 def find_python_lib():
-    """Динамически находит путь к libpython*.dylib/.so/.dll"""
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     system = platform.system()
 
-    if system == "Darwin":  # macOS
+    if system == "Darwin":
         paths = [
             f"/Library/Frameworks/Python.framework/Versions/{python_version}/lib/libpython{python_version}.dylib",
             f"/usr/local/opt/python@{python_version}/Frameworks/Python.framework/Versions/{python_version}/lib/libpython{python_version}.dylib",
@@ -26,7 +25,7 @@ def find_python_lib():
             f"/usr/local/lib/libpython{python_version}.so",
             f"/usr/lib/libpython{python_version}.so"
         ]
-    else:  # Windows
+    else:
         return None
 
     for path in paths:
@@ -37,90 +36,89 @@ def find_python_lib():
 python_lib = find_python_lib()
 
 # ========================================================
-# 2. Сбор данных и зависимостей
+# 2. Сбор всех модулей и ресурсов
 # ========================================================
 
+# Сбор всех файлов из favicons/
+def collect_favicons():
+    favicons = []
+    base_path = os.path.join(os.getcwd(), 'favicons')
+    if os.path.exists(base_path):
+        for fname in os.listdir(base_path):
+            full_path = os.path.join(base_path, fname)
+            if os.path.isfile(full_path):
+                favicons.append((full_path, 'favicons'))
+    return favicons
+
+# Модули проекта
+modules = ['utils', 'ui', 'models', 'data_processing', 'api', 'ml']
+
 datas, binaries, hiddenimports = [], [], []
-for module in ['utils', 'ui', 'models', 'data_processing', 'api', 'ml']:
+for module in modules:
     d, b, h = collect_all(module)
     datas += d
     binaries += b
     hiddenimports += h
 
-# Добавляем Python библиотеку, если нашли
+# Добавляем найденную библиотеку python (для Mac/Linux)
 if python_lib:
     binaries += [(python_lib, '.')]
 
-# Статические файлы
-datas += [
-    ('favicons/favicon.icns', 'favicons'),
-    ('favicons/favicon.png', 'favicons'),
-    ('favicons/favicon.ico', 'favicons')
-]
+# Добавляем фавиконки
+datas += collect_favicons()
 
-# Исключения
+# Модули которые исключаем (если есть)
 excludes = ['annotated_dataset']
 
 # ========================================================
-# 3. Конфигурация Analysis
+# 3. Analysis
 # ========================================================
 
 a = Analysis(
-    ['main.py'],
-    pathex=[os.getcwd()],
+    ['main.py'],                 # Главный скрипт
+    pathex=[os.getcwd()],         # Путь к проекту
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     excludes=excludes,
-    noarchive=True,
+    noarchive=False,              # Архивируем (ускоряет запуск!)
     runtime_tmpdir=None,
-    python_optimize=0,
-    upx=True if platform.system() != "Darwin" else False
+    python_optimize=2,            # Максимальная оптимизация байткода
+    upx=True if platform.system() != "Darwin" else False  # UPX использовать, но на Mac — осторожно
 )
 
-pyz = PYZ(a.pure, a.zipped_data)
+# ========================================================
+# 4. Компиляция
+# ========================================================
 
-# ========================================================
-# 4. Конфигурация EXE
-# ========================================================
+pyz = PYZ(
+    a.pure,
+    a.zipped_data,
+    cipher=None,
+)
 
 exe = EXE(
     pyz,
     a.scripts,
-    [],
-    [],
-    [],
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     name='ImageAnnotation',
     debug=False,
-    strip=False,
+    strip=True,                   # Убираем дебажные символы (меньше размер)
     upx=True,
-    runtime_tmpdir=None,
-    console=False,
+    console=False,                 # Без консоли (GUI)
     icon='favicons/favicon.icns' if platform.system() == "Darwin" else 'favicons/favicon.ico'
 )
 
 # ========================================================
-# 5. Сборка через COLLECT
-# ========================================================
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    name='ImageAnnotation'
-)
-
-# ========================================================
-# 6. Сборка .app для macOS
+# 5. macOS: создание полноценного .app пакета
 # ========================================================
 
 if platform.system() == "Darwin":
     app = BUNDLE(
-        coll,
+        exe,
         name='ImageAnnotation.app',
         icon='favicons/favicon.icns',
         bundle_identifier='com.yourdomain.imageannotation',
