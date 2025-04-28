@@ -34,13 +34,13 @@ def decode_unicode_escape(text):
     return re.sub(r'\\u([\da-fA-F]{4})', lambda m: chr(int(m.group(1), 16)), text)
 
 
-def setup_logging(log_file='dataset_preparation.log'):
+def setup_logging(log_file=DATA_DIR / 'dataset_preparation.log'):
     """Настройка логирования."""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_file),
+            logging.FileHandler(str(log_file)),
             logging.StreamHandler()
         ]
     )
