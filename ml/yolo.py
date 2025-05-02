@@ -201,19 +201,24 @@ def prepare_yolo_dataset(
     else:
         yaml_path = os.path.join(output_base_dir, 'data.yaml')
 
-        with open(yaml_path, 'r') as f:
-            yaml_content = yaml.safe_load(f)
+        if os.path.exists(yaml_path):
+            with open(yaml_path, 'r') as f:
+                yaml_content = yaml.safe_load(f) or {}
+        else:
+            yaml_content = {}
 
         yaml_content['test'] = os.path.abspath(os.path.join(output_base_dir, 'test', 'images'))
+        yaml_content['train'] = os.path.abspath(os.path.join(output_base_dir, 'train', 'images'))
+        yaml_content['val'] = os.path.abspath(os.path.join(output_base_dir, 'val', 'images'))
+        yaml_content['nc'] = len(class_names)
+        yaml_content['names'] = class_names
 
-        yaml_path = os.path.join(output_base_dir, 'data.yaml')
         with open(yaml_path, 'w') as f:
             yaml.dump(yaml_content, f, sort_keys=False)
 
         logging.info(f"Датасет успешно подготовлен в {output_base_dir}")
         logging.info(f"Test images: {len(test_images)}")
-
-        logging.info(f"YAML config обновлен: {yaml_path}")
+        logging.info(f"YAML config обновлён: {yaml_path}")
 
 
 def visualize_yolo_labels(image_path, label_path, class_names, output_dir="debug"):

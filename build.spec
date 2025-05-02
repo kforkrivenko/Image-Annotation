@@ -116,20 +116,19 @@ exe = EXE(
 # 5. macOS: создание полноценного .app пакета
 # ========================================================
 
-if platform.system() == "Darwin":
-    app = BUNDLE(
-        exe,
-        name='ImageAnnotation.app',
-        icon='favicons/favicon.icns',
-        bundle_identifier='com.yourdomain.imageannotation',
-        info_plist={
-            'CFBundleDocumentTypes': [{
-                'CFBundleTypeName': 'Image Annotation Project',
-                'CFBundleTypeExtensions': ['iap'],
-                'CFBundleTypeRole': 'Editor'
-            }],
-            'NSHighResolutionCapable': 'True',
-            'LSMinimumSystemVersion': '10.15',
-            'NSRequiresAquaSystemAppearance': 'False'
-        }
-    )
+app = BUNDLE(
+    exe,
+    name='ImageAnnotation.app',
+    icon='favicons/favicon.icns',
+    bundle_identifier='com.yourdomain.imageannotation',
+    info_plist={
+        'CFBundleDocumentTypes': [{
+            'CFBundleTypeName': 'Image Annotation Project',
+            'CFBundleTypeExtensions': ['iap'],
+            'CFBundleTypeRole': 'Editor'
+        }],
+        'NSHighResolutionCapable': 'True',
+        'LSMinimumSystemVersion': '10.15',
+        'NSRequiresAquaSystemAppearance': 'False'
+    }
+)

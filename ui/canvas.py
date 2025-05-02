@@ -7,11 +7,10 @@ from utils.logger import log_method
 
 class AnnotationCanvas(tk.Canvas):
     @log_method
-    def __init__(self, parent, image_loader, annotation_saver, **kwargs):
+    def __init__(self, parent, image_loader, annotation_saver, readonly=False, **kwargs):
         super().__init__(parent, width=800, height=600, bd=0, highlightthickness=0, **kwargs)
         self.annotation_saver = annotation_saver
         self.image_loader = image_loader
-        self._setup_canvas()
 
         self.current_rect = None
         self.image_on_canvas = None
@@ -21,6 +20,9 @@ class AnnotationCanvas(tk.Canvas):
         self.annotations = []
         self.ratio = 1.0
         self.default_label = None
+        self.readonly = readonly
+
+        self._setup_canvas()
 
     def _setup_canvas(self):
         self.configure(bg="white", cursor="cross")
@@ -29,7 +31,8 @@ class AnnotationCanvas(tk.Canvas):
         self.ratio = 1.0
 
         # Привязка событий
-        self._bind_events()
+        if not self.readonly:
+            self._bind_events()
 
     def _bind_events(self):
         self.bind("<ButtonPress-1>", self._on_press)

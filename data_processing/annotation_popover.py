@@ -19,11 +19,12 @@ def get_unique_folder_name(source_path: Path) -> str:
 
 
 class AnnotationPopover(tk.Toplevel):
-    def __init__(self, parent, app):
+    def __init__(self, parent, app, readonly=False):
         super().__init__(parent)
         self.app = app
         self.title("Разметка датасета")
         self.geometry("1200x800")
+        self.readonly = readonly
 
         # Блокируем главное окно
         self.grab_set()
@@ -73,11 +74,13 @@ class AnnotationPopover(tk.Toplevel):
             justify='left'  # Выравнивание текста (left/center/right)
         )
         self.current_blazon_label.pack(pady=5)
-        ttk.Label(right_frame, text="Разметка:").pack(pady=10)
-        ttk.Entry(right_frame, textvariable=text_var, width=30).pack(pady=5)
+
+        if not self.readonly:
+            ttk.Label(right_frame, text="Разметка:").pack(pady=10)
+            ttk.Entry(right_frame, textvariable=text_var, width=30).pack(pady=5)
 
         # Canvas для изображений
-        self.canvas = AnnotationCanvas(left_frame, self.image_loader, self.annotation_saver)
+        self.canvas = AnnotationCanvas(left_frame, self.image_loader, self.annotation_saver, readonly=self.readonly)
         self.canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # Панель управления

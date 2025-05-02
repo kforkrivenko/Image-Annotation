@@ -10,12 +10,13 @@ from utils.paths import DATA_DIR
 
 
 class DatasetDeleter:
-    def __init__(self, master):
+    def __init__(self, master, test_dataset=False):
         self.master = master
         self.queue = queue.Queue()
         self.is_running = False
         self.progress_window = None
         self.current_task_id = 0
+        self.test_dataset = test_dataset
 
     def delete_datasets(self, datasets):
         if not datasets:
@@ -27,10 +28,21 @@ class DatasetDeleter:
 
         output_dir = DATA_DIR / "annotated_dataset"
         hash_to_name_path = output_dir / 'hash_to_name.json'
-        hash_to_name_manager = JsonManager(hash_to_name_path)
-        dataset_names = ' '.join(list(map(lambda dataset: Path(hash_to_name_manager[Path(dataset).name]).name, datasets)))
 
-        txt_conf = f"Удалить датасеты: {dataset_names}?" if len(datasets) > 1 else f"Удалить датасет: {dataset_names}?"
+        if not self.test_dataset:
+            hash_to_name_manager = JsonManager(hash_to_name_path)
+            dataset_names = ' '.join(
+                list(map(lambda dataset: Path(hash_to_name_manager[Path(dataset).name]).name, datasets)))
+        else:
+            hash_to_name_manager = JsonManager(hash_to_name_path)
+            dataset_names = ' '.join(
+                list(map(lambda dataset: Path(hash_to_name_manager[Path(dataset).parent.parent.name]).name, datasets)))
+
+        if not self.test_dataset:
+            txt_conf = f"Удалить датасеты: {dataset_names}?" if len(datasets) > 1 else f"Удалить датасет: {dataset_names}?"
+        else:
+            txt_conf = f"Удалить результат тестирование датасетов: {dataset_names}?" if len(
+                datasets) > 1 else f"Удалить результаты тестирования датасетов: {dataset_names}?"
         confirm = messagebox.askyesno(
             "Подтверждение",
             txt_conf,
@@ -70,21 +82,25 @@ class DatasetDeleter:
 
                 try:
                     if dataset.exists():
-                        shutil.rmtree(dataset, ignore_errors=True)
+                        if not self.test_dataset:
+                            shutil.rmtree(dataset, ignore_errors=True)
+                        else:
+                            shutil.rmtree(dataset.parent.parent, ignore_errors=True)
 
                     dataset_path = str(output_dir / dataset.name)
 
-                    annotations_manager.delete_key(dataset_path)
-                    hash_to_name_manager.delete_key(dataset.name)
+                    if not self.test_dataset:
+                        annotations_manager.delete_key(dataset_path)
+                        hash_to_name_manager.delete_key(dataset.name)
 
                     self.queue.put(("progress", i, len(datasets)))
 
                 except Exception as e:
                     self.queue.put(("error", f"{dataset.name}: {str(e)}"))
                     continue
-
-            annotations_manager.save()
-            hash_to_name_manager.save()
+            if not self.test_dataset:
+                annotations_manager.save()
+                hash_to_name_manager.save()
 
             self.queue.put(("complete", task_id))
         except Exception as e:
@@ -164,6 +180,7 @@ class DatasetDeleter:
 
         # Обновляем список датасетов
         self.master.event_generate("<<RefreshDatasets>>")
+        self.master.event_generate("<<RefreshTestedDatasets>>")
         messagebox.showinfo("Готово", "Удаление завершено", parent=self.master)
 
     def _confirm_cancel(self):

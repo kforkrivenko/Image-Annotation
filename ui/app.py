@@ -70,7 +70,9 @@ class ImageAnnotationApp:
         self._set_window_icon()
         self._setup_ui()
         self.deleter = DatasetDeleter(self.root)
+        self.deleter_test = DatasetDeleter(self.root, test_dataset=True)
         self.root.bind("<<RefreshDatasets>>", lambda e: self.get_annotated_datasets())
+        self.root.bind("<<RefreshTestedDatasets>>", lambda e: self.get_tested_datasets())
 
     def _set_window_icon(self):
         """Устанавливает иконку в зависимости от ОС"""
@@ -175,22 +177,30 @@ class ImageAnnotationApp:
         self.annotated_datasets = []
         self.get_annotated_datasets()
 
-        # Правая колонка
+        self.tested_datasets = []
+
+        # --- Правая часть (дообучение) ---
         self.right_frame = tk.Frame(self.bottom_frame, bg="white", relief=tk.SUNKEN, borderwidth=1)
         self.right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Заголовок для правой части
+        # Контейнер для вертикального разделения
+        self.right_container = tk.Frame(self.right_frame, bg="white")
+        self.right_container.pack(fill=tk.BOTH, expand=True)
+
+        # Верхняя часть (существующее содержимое)
+        self.right_top_frame = tk.Frame(self.right_container, bg="white")
+        self.right_top_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Заголовок для верхней части
         tk.Label(
-            self.right_frame,
+            self.right_top_frame,
             text="Дообучение",
             font=("Arial", 12),
             bg="white"
         ).pack(pady=10)
 
-        # --- Правая часть (дообучение) ---
-
         # Блок выбора модели
-        self.model_frame = tk.Frame(self.right_frame, bg="white")
+        self.model_frame = tk.Frame(self.right_top_frame, bg="white")
         self.model_frame.pack(fill=tk.X, padx=20, pady=10)
 
         tk.Label(
@@ -211,7 +221,7 @@ class ImageAnnotationApp:
         )
         self.model_selector.pack(fill=tk.X, pady=5)
 
-        # Блок кнопок скачивания (всегда видим)
+        # Блок кнопок скачивания
         download_frame = tk.Frame(self.model_frame, bg="white")
         download_frame.pack(fill=tk.X, pady=10)
 
@@ -243,15 +253,78 @@ class ImageAnnotationApp:
             bg="#e1e1e1"
         ).pack(side=tk.LEFT, padx=5)
 
+        tk.Button(
+            download_frame,
+            text="Загрузить свою модель",
+            command=self._download_user_model,
+            bg="#e1e1e1"
+        ).pack(side=tk.LEFT, padx=5)
+
         # Кнопка запуска обучения
         train_button = tk.Button(
-            self.right_frame,
+            self.right_top_frame,
             text="Обучить на выбранных датасетах",
             command=self._open_training_popup,
             bg="#4CAF50",
             font=("Arial", 12, "bold")
         )
         train_button.pack(pady=20, ipadx=10, ipady=5)
+
+        test_button = tk.Button(
+            self.right_top_frame,
+            text="Протестировать на датасете",
+            command=self._open_testing_popup,
+            bg="#2196F3",
+            font=("Arial", 12, "bold")
+        )
+        test_button.pack(pady=10, ipadx=10, ipady=5)
+
+        # Нижняя часть (новая)
+        self.right_bottom_frame = tk.Frame(self.right_container, bg="white", relief=tk.RAISED, borderwidth=1)
+        self.right_bottom_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+
+        # Заголовок для нижней части
+        tk.Label(
+            self.right_bottom_frame,
+            text="Протестированные датасеты",
+            font=("Arial", 12),
+            bg="white"
+        ).pack(pady=10)
+
+        # Контейнер для списка протестированных датасетов
+        self.tested_datasets_container = tk.Frame(self.right_bottom_frame, bg="white")
+        self.tested_datasets_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        # Прокручиваемый список
+        self.tested_canvas = tk.Canvas(self.tested_datasets_container, bg="white")
+        scrollbar = ttk.Scrollbar(self.tested_datasets_container, orient="vertical", command=self.tested_canvas.yview)
+        self.tested_scrollable_frame = tk.Frame(self.tested_canvas, bg="white")
+
+        self.tested_scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.tested_canvas.configure(
+                scrollregion=self.tested_canvas.bbox("all")
+            )
+        )
+
+        self.tested_canvas.create_window((0, 0), window=self.tested_scrollable_frame, anchor="nw")
+        self.tested_canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side="right", fill="y")
+        self.tested_canvas.pack(side="left", fill="both", expand=True)
+
+        # Инициализация списка протестированных датасетов
+        self._setup_tested_datasets_panel()
+
+    def _refresh_ui(self):
+        """Полностью обновляет интерфейс приложения"""
+        # Удаляем все виджеты из главного окна
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Пересоздаем интерфейс
+        self._setup_ui()
+        self._setup_tested_datasets_panel()
 
     def _get_available_models(self):
         """Проверяет наличие скачанных моделей."""
@@ -260,16 +333,39 @@ class ImageAnnotationApp:
             return []
 
         models = list([f.name for f in models_dir.glob("*.pt")])
-        models_trained = list([f.parent.parent.name + "/" + f.name for f in Path(DATA_DIR).glob("**/best.pt")])
-        return models + models_trained
+        # models_trained = list([f.parent.parent.name + "/" + f.name for f in Path(DATA_DIR).glob("**/best.pt")])
+        return models  # + models_trained
 
     def _download_model(self, model_name):
-        """Имитация скачивания модели."""
+        """Cкачивания модели."""
         _ = ensure_model_downloaded(model_name)
         #  model = YOLO(model_path)
 
         messagebox.showinfo("Модель загружена", f"Модель {model_name} успешно скачана.")
-        self._refresh_right_panel()
+        self._refresh_ui()
+
+    def _download_user_model(self):
+        """Cкачивания модели."""
+        filepath = filedialog.askopenfilename(
+            title="Загрузить модель",
+            filetypes=[("PyTorch Model", "*.pt")]
+        )
+        if not filepath:
+            return
+
+        models_dir = DATA_DIR / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        dest_path = models_dir / Path(filepath).name
+
+        if dest_path.exists() and dest_path.is_file():
+            dest_path = models_dir / (Path(filepath).name[:-3] + '_2.pt')
+
+        try:
+            shutil.copy2(Path(filepath), dest_path)
+            messagebox.showinfo("Модель загружена", f"Модель {Path(filepath).name} успешно скачана.")
+            self._refresh_ui()
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка при загрузке файла: {str(e)}")
 
     def _refresh_right_panel(self):
         """Перестраивает правую панель после загрузки модели."""
@@ -331,8 +427,18 @@ class ImageAnnotationApp:
             bg="#e1e1e1"
         ).pack(side=tk.LEFT, padx=5)
 
+        tk.Button(
+            download_frame,
+            text="YOLOv8m",
+            command=self._download_user_model,
+            bg="#e1e1e1"
+        ).pack(side=tk.LEFT, padx=5)
+
         self.annotated_datasets = []
         self.get_annotated_datasets()
+
+        self.tested_datasets = []
+        self.get_tested_datasets()
 
     def _open_training_popup(self):
         """Открывает окно настроек обучения"""
@@ -460,53 +566,6 @@ class ImageAnnotationApp:
         self.train_status = tk.Label(popup, text="Готов к обучению...")
         self.train_status.pack()
 
-    def _start_training(self, popup, batch, epochs, imgsz, workers, model_name, device, class_vars, datasets):
-        """Запускает обучение в отдельном потоке"""
-        self.training_cancelled = False
-        try:
-            batch = int(batch)
-            epochs = int(epochs)
-            imgsz = int(imgsz)
-            workers = int(workers)
-        except Exception as e:
-            self._show_error(f"Неверный формат: {e}")
-            return
-
-        if not self.model_var:
-            self._show_error("Не выбрана модель")
-            return
-
-        # Создаем окно для отображения прогресса
-        self._create_training_window(popup)
-
-        # Подготовка данных в основном потоке (это быстро)
-        selected_classes = [name for name, var in class_vars.items() if var.get()]
-        selected_datasets = [dataset.name for dataset in datasets]
-
-        JSON_PATH = DATA_DIR / "annotated_dataset/annotations.json"
-        IMAGES_DIR = DATA_DIR / "annotated_dataset"
-
-        self._update_train_status("Подготовка датасета...")
-        prepare_yolo_dataset(
-            json_path=JSON_PATH,
-            images_source_dir=IMAGES_DIR,
-            dir_names=selected_datasets,
-            output_base_dir=str(DATA_DIR / "data" / model_name),
-            class_names=selected_classes,
-            train_ratio=0.8,
-            seed=42,
-            default_img_ext=".jpg",
-            copy_files=True
-        )
-
-        # Запускаем обучение в отдельном потоке
-        self.training_thread = threading.Thread(
-            target=self._run_training,
-            args=(batch, epochs, imgsz, workers, model_name, device),
-            daemon=True
-        )
-        self.training_thread.start()
-
     def _create_training_window(self, parent):
         """Создает окно для отображения прогресса обучения"""
         self.train_window = tk.Toplevel(parent)
@@ -537,29 +596,55 @@ class ImageAnnotationApp:
         sys.stdout = TextRedirector(self.train_output)
         sys.stderr = TextRedirector(self.train_output)
 
-    def _update_train_status(self, message, success=False, error=False):
-        """Обновляет статус обучения"""
+    def _create_testing_window(self, parent):
+        """Создает окно для отображения прогресса обучения"""
+        self.test_window = tk.Toplevel(parent)
+        self.test_window.title("Процесс тестирования")
+        self.test_window.geometry("800x600")
 
-        def update():
-            self.train_status.config(text=message)
-            if success:
-                self.train_status.config(fg="green")
-            elif error:
-                self.train_status.config(fg="red")
-            else:
-                self.train_status.config(fg="black")
+        # Текстовый вывод
+        self.test_output = tk.Text(self.test_window, wrap=tk.WORD)
+        self.test_output.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        self.root.after(0, update)
+        # Прогресс-бар
+        self.test_progress = ttk.Progressbar(self.test_window, orient=tk.HORIZONTAL, length=300, mode='determinate')
+        self.test_progress.pack(pady=5)
+
+        # Статус
+        self.test_status = tk.Label(self.test_window, text="Готов к обучению...")
+        self.test_status.pack()
+
+        # Кнопка отмены
+        tk.Button(
+            self.test_window,
+            text="Отменить тестирование",
+            command=self._cancel_testing,
+            bg="#ff6666"
+        ).pack(pady=10)
+
+        # Перенаправляем вывод
+        sys.stdout = TextRedirector(self.test_output)
+        sys.stderr = TextRedirector(self.test_output)
 
     def _cancel_training(self):
         """Безопасная отмена обучения"""
         if hasattr(self, 'training_thread') and self.training_thread.is_alive():
             if messagebox.askyesno("Отмена", "Прервать обучение?", parent=self.train_window):
                 self.training_cancelled = True
-                self._safe_update_status("Обучение прерывается...", warning=True)
+                self._safe_update_train_status("Обучение прерывается...", warning=True)
 
                 # Пытаемся корректно закрыть окно через 1 секунду
                 self.root.after(1000, self._safe_finalize_training)
+
+    def _cancel_testing(self):
+        """Безопасная отмена обучения"""
+        if hasattr(self, 'testing_thread') and self.testing_thread.is_alive():
+            if messagebox.askyesno("Отмена", "Прервать тестирование?", parent=self.test_window):
+                self.testing_cancelled = True
+                self._safe_update_test_status("Обучение прерывается...", warning=True)
+
+                # Пытаемся корректно закрыть окно через 1 секунду
+                self.root.after(1000, self._safe_finalize_testing)
 
     def _run_training(self, batch, epochs, imgsz, workers, model_name, device):
         """Выполняет обучение модели с безопасным обновлением UI"""
@@ -569,22 +654,19 @@ class ImageAnnotationApp:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-            self._safe_update_status("Загрузка модели...")
+            self._safe_update_train_status("Загрузка модели...")
             model_variant = self.model_var.get()
-            if "/" in model_variant:
-                model = YOLO(DATA_DIR / 'data' / model_variant.split("/")[0] / "weights" / "best.pt")
-            else:
-                model = YOLO(DATA_DIR / 'models' / model_variant)
+            model = YOLO(DATA_DIR / 'models' / model_variant)
 
-            self._safe_update_status("Начинаем обучение...")
+            self._safe_update_train_status("Начинаем обучение...")
             self._safe_set_progress_max(epochs)
 
             for epoch in range(epochs):
                 if getattr(self, 'training_cancelled', False):
-                    self._safe_update_status("Обучение прервано", warning=True)
+                    self._safe_update_train_status("Обучение прервано", warning=True)
                     break
 
-                self._safe_update_status(f"Эпоха {epoch}/{epochs}")
+                self._safe_update_train_status(f"Эпоха {epoch}/{epochs}")
                 self._safe_set_progress(epoch + 1)
 
                 custom_project_dir = DATA_DIR / "data" / model_name / "result"
@@ -600,21 +682,26 @@ class ImageAnnotationApp:
                     pretrained=True,
                     optimizer='AdamW',
                     verbose=True,
-                    project=str(custom_project_dir),  # Указываем кастомный путь
+                    project=str(custom_project_dir),
                     exist_ok=True  # Разрешаем перезапись
                 )
 
             if not getattr(self, 'training_cancelled', False):
-                self._safe_update_status("Обучение завершено!", success=True)
+                self._safe_update_train_status("Обучение завершено!", success=True)
 
         except Exception as e:
-            self._safe_update_status(f"Ошибка: {str(e)}", error=True)
+            self._safe_update_train_status(f"Ошибка: {str(e)}", error=True)
         finally:
             # Корректное освобождение ресурсов
             if model is not None:
                 try:
                     model.model.cpu()  # Переводим модель на CPU перед удалением
                     del model
+
+                    best_pt_path = custom_project_dir / model_name / "weights" / "best.pt"
+                    destination_path = DATA_DIR / "models" / f"{model_name}_best.pt"
+                    if best_pt_path.exists():
+                        shutil.copy2(best_pt_path, destination_path)
                 except:
                     pass
 
@@ -634,7 +721,76 @@ class ImageAnnotationApp:
 
             self._safe_finalize_training()
 
-    def _safe_update_status(self, message, success=False, error=False, warning=False):
+    def _run_testing(self, path_to_yaml, path_to_result, path_to_test_images, batch, imgsz, conf, iou, device):
+        """Выполняет обучение модели с безопасным обновлением UI"""
+        try:
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            self._safe_update_test_status("Загрузка модели...")
+            model_variant = self.model_var.get()
+            model = YOLO(DATA_DIR / 'models' / model_variant)
+
+            self._safe_update_test_status("Начинаем тестирование...")
+
+            if getattr(self, 'testing_cancelled', False):
+                self._safe_update_test_status("Тестирование прервано", warning=True)
+                return
+
+            results = model.val(
+                data=path_to_yaml,  # путь к data.yaml
+                split='test',  # использование тестового набора (должен быть указан в data.yaml)
+                batch=batch,  # размер батча
+                imgsz=imgsz,  # разрешение изображений
+                conf=conf,  # порог уверенности для детекции
+                iou=iou,  # порог IoU для NMS
+                device=device,  # GPU (если доступен)
+                project=path_to_result
+            )
+
+            # Перезагружаем модель
+            model = YOLO(DATA_DIR / 'models' / model_variant)
+            model.predict(
+                source=path_to_test_images,
+                save=True,
+                conf=0.5,
+                project=path_to_result
+            )
+
+            if not getattr(self, 'testing_cancelled', False):
+                self._safe_update_test_status("Обучение завершено!", success=True)
+
+        except Exception as e:
+            self._safe_update_test_status(f"Ошибка: {str(e)}", error=True)
+        finally:
+            # Корректное освобождение ресурсов
+            if model is not None:
+                try:
+                    model.model.cpu()  # Переводим модель на CPU перед удалением
+                    del model
+                except:
+                    print("cannot delete model")
+                    pass
+
+            # Очистка памяти
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            # Принудительный сборщик мусора
+            import gc
+            gc.collect()
+
+            # Восстановление стандартных потоков
+            sys.stdout = sys.__stdout__
+            sys.stderr = sys.__stderr__
+
+            self._safe_finalize_testing()
+
+    def _safe_update_train_status(self, message, success=False, error=False, warning=False):
         """Безопасное обновление статуса"""
 
         def update():
@@ -648,6 +804,26 @@ class ImageAnnotationApp:
                     self.train_status.config(fg="orange")
                 else:
                     self.train_status.config(fg="black")
+
+        try:
+            self.root.after(0, update)
+        except:
+            pass
+
+    def _safe_update_test_status(self, message, success=False, error=False, warning=False):
+        """Безопасное обновление статуса"""
+
+        def update():
+            if hasattr(self, 'test_status') and self.test_status.winfo_exists():
+                self.test_status.config(text=message)
+                if success:
+                    self.test_status.config(fg="green")
+                elif error:
+                    self.test_status.config(fg="red")
+                elif warning:
+                    self.test_status.config(fg="orange")
+                else:
+                    self.test_status.config(fg="black")
 
         try:
             self.root.after(0, update)
@@ -678,6 +854,352 @@ class ImageAnnotationApp:
         except:
             pass
 
+    def _start_training(self, popup, batch, epochs, imgsz, workers, model_name, device, class_vars, datasets):
+        """Запускает обучение в отдельном потоке"""
+        self.training_cancelled = False
+        try:
+            batch = int(batch)
+            epochs = int(epochs)
+            imgsz = int(imgsz)
+            workers = int(workers)
+        except Exception as e:
+            self._show_error(f"Неверный формат: {e}")
+            return
+
+        if not self.model_var:
+            self._show_error("Не выбрана модель")
+            return
+
+        # Создаем окно для отображения прогресса
+        self._create_training_window(popup)
+
+        # Подготовка данных в основном потоке
+        selected_classes = [name for name, var in class_vars.items() if var.get()]
+        if not selected_classes:
+            messagebox.showwarning("Внимание", "Выберите хотя бы один класс для обучения", parent=popup)
+            return
+        selected_datasets = [dataset.name for dataset in datasets]
+
+        JSON_PATH = DATA_DIR / "annotated_dataset/annotations.json"
+        IMAGES_DIR = DATA_DIR / "annotated_dataset"
+
+        self._update_train_status("Подготовка датасета...")
+        prepare_yolo_dataset(
+            json_path=JSON_PATH,
+            images_source_dir=IMAGES_DIR,
+            dir_names=selected_datasets,
+            output_base_dir=str(DATA_DIR / "data" / model_name),
+            class_names=selected_classes,
+            train_ratio=0.8,
+            seed=42,
+            default_img_ext=".jpg",
+            copy_files=True
+        )
+
+        # Запускаем обучение в отдельном потоке
+        self.training_thread = threading.Thread(
+            target=self._run_training,
+            args=(batch, epochs, imgsz, workers, model_name, device),
+            daemon=True
+        )
+        self.training_thread.start()
+
+    def _open_testing_popup(self):
+        # Проверка выбранных датасетов
+        if not self.selected_datasets:
+            messagebox.showwarning("Внимание", "Не выбраны датасеты для тестирования")
+            return
+
+        popup = tk.Toplevel(self.root)
+        popup.title("Тестирование модели")
+        popup.geometry("400x500")
+
+        # Параметры
+        params_frame = tk.Frame(popup)
+        params_frame.pack(pady=10)
+
+        tk.Label(params_frame, text="Batch Size:").grid(row=0, column=0, sticky="e", padx=5, pady=5)
+        batch_entry = tk.Entry(params_frame)
+        batch_entry.insert(0, "16")
+        batch_entry.grid(row=0, column=1, padx=5, pady=5)
+
+        tk.Label(params_frame, text="Imgs size:").grid(row=1, column=0, sticky="e", padx=5, pady=5)
+        imgsz_entry = tk.Entry(params_frame)
+        imgsz_entry.insert(0, "640")
+        imgsz_entry.grid(row=1, column=1, padx=5, pady=5)
+
+        tk.Label(params_frame, text="Conf:").grid(row=2, column=0, sticky="e", padx=5, pady=5)
+        conf_entry = tk.Entry(params_frame)
+        conf_entry.insert(0, "0.5")
+        conf_entry.grid(row=2, column=1, padx=5, pady=5)
+
+        tk.Label(params_frame, text="Iou:").grid(row=3, column=0, sticky="e", padx=5, pady=5)
+        iou_entry = tk.Entry(params_frame)
+        iou_entry.insert(0, "0.5")
+        iou_entry.grid(row=3, column=1, padx=5, pady=5)
+
+        # Выбор устройства
+        tk.Label(params_frame, text="Устройства:", font=("Arial", 12, "bold")).grid(row=6, column=0, sticky="e", padx=5,
+                                                                                    pady=5)
+
+        def get_available_devices():
+            # Проверяем доступность GPU, если доступно - добавляем в список
+            devices = ["cpu"]  # Всегда доступен CPU
+
+            if torch.cuda.is_available():
+                # Если доступен GPU, добавляем его в список
+                devices.append(f"cuda")
+
+            if torch.backends.mps.is_available():
+                # Если доступен MPS, добавляем его в список
+                devices.append(f"mps")
+
+            return devices
+
+        device_var = tk.StringVar(value="cpu")
+        device_menu = ttk.Combobox(params_frame, textvariable=device_var, values=get_available_devices(),
+                                   state="readonly")
+        device_menu.grid(row=6, column=1, padx=5, pady=5)
+
+        # Выбор классов
+        tk.Label(popup, text="Выбор классов:", font=("Arial", 12, "bold")).pack(pady=10)
+
+        classes_frame = tk.Frame(popup)
+        classes_frame.pack()
+
+        class_vars = {}
+
+        output_dir = DATA_DIR / "annotated_dataset"
+        annotation_manager = AnnotationFileManager(os.path.join(output_dir, 'annotations.json'))
+
+        classes = set()
+        for dataset in self.selected_datasets:
+            if annotation_manager[str(output_dir / dataset.name)]:
+                for anns in annotation_manager[str(output_dir / dataset.name)].values():
+                    for ann in anns:
+                        classes.add(ann['text'])
+        for i, class_name in enumerate(classes):
+            var = tk.BooleanVar(value=True)
+            cb = tk.Checkbutton(classes_frame, text=class_name, variable=var)
+            cb.grid(row=i, column=0, sticky="w", padx=10, pady=2)
+            class_vars[class_name] = var
+
+        if not classes:
+            tk.Label(params_frame, text="Класс:").grid(row=7, column=0, sticky="e", padx=5, pady=5)
+            class_entry = tk.Entry(params_frame)
+            class_entry.insert(0, "ваш_класс")
+            class_entry.grid(row=7, column=1, padx=5, pady=5)
+
+        # Кнопка запуска тестирования
+        tk.Button(
+            popup,
+            text="Начать тестирование",
+            bg="#2196F3",
+            font=("Arial", 12, "bold"),
+            command=lambda: self._start_testing(
+                popup,
+                class_vars if classes else class_entry.get(),
+                self.selected_datasets,
+                batch_entry.get(), imgsz_entry.get(), conf_entry.get(), iou_entry.get(), device_var.get()
+            )
+        ).pack(pady=20)
+
+    def _start_testing(self, popup, class_vars, datasets, batch, imgsz, conf, iou, device):
+        # Создаем окно для отображения прогресса
+        self.testing_cancelled = False
+        try:
+            batch = int(batch)
+            conf = float(conf)
+            imgsz = int(imgsz)
+            iou = float(iou)
+        except Exception as e:
+            self._show_error(f"Неверный формат: {e}")
+            return
+        self._create_testing_window(popup)
+
+        # Получить выбранные классы
+        if isinstance(class_vars, str):
+            selected_classes = [class_vars]
+        else:
+            selected_classes = [name for name, var in class_vars.items() if var.get()]
+        if not selected_classes:
+            messagebox.showwarning("Внимание", "Выберите хотя бы один класс для тестирования", parent=popup)
+            return
+
+        selected_datasets = [dataset.name for dataset in datasets]
+
+        JSON_PATH = DATA_DIR / "annotated_dataset/annotations.json"
+        IMAGES_DIR = DATA_DIR / "annotated_dataset"
+
+        self._safe_update_test_status("Подготовка датасетов...")
+        output_base_dir = DATA_DIR / "data" / "test" / selected_datasets[0]
+        prepare_yolo_dataset(
+            json_path=JSON_PATH,
+            images_source_dir=IMAGES_DIR,
+            dir_names=selected_datasets,
+            output_base_dir=str(output_base_dir),
+            class_names=selected_classes,
+            seed=42,
+            default_img_ext=".jpg",
+            copy_files=True,
+            test=True
+        )
+
+        # Запускаем тестирование в отдельном потоке
+        self.testing_thread = threading.Thread(
+            target=self._run_testing,
+            args=(
+                str(output_base_dir / "data.yaml"),
+                str(output_base_dir / "result"),
+                str(output_base_dir / "test" / "images"),
+                batch, imgsz, conf, iou, device
+            ),
+            daemon=True
+        )
+        self.testing_thread.start()
+        # self._add_tested_dataset_panel(selected_datasets, selected_classes)
+
+    def _setup_tested_datasets_panel(self):
+        """Настройка панели протестированных датасетов"""
+        # Очищаем предыдущие элементы
+        for widget in self.tested_scrollable_frame.winfo_children():
+            widget.destroy()
+
+        # Добавляем заголовок
+        tk.Label(
+            self.tested_scrollable_frame,
+            text="История тестирования",
+            font=("Arial", 10, "bold"),
+            bg="white"
+        ).pack(anchor="w", pady=5)
+
+        # Получаем список датасетов
+        test_dir = DATA_DIR / "data" / "test"
+        if not test_dir.exists():
+            return
+        output_dir = DATA_DIR / "annotated_dataset"
+        sub_folders = [f for f in test_dir.iterdir() if f.is_dir()]
+        json_manager = JsonManager(os.path.join(output_dir, 'hash_to_name.json'))
+
+        # Параметры сетки
+        ITEMS_PER_ROW = 3
+        ITEM_WIDTH = 250
+        PREVIEW_SIZE = 150
+
+        # Контейнер для сетки
+        grid_container = tk.Frame(self.tested_scrollable_frame, bg="white")
+        grid_container.pack(fill=tk.BOTH, expand=True)
+
+        # Настройка столбцов
+        for col in range(ITEMS_PER_ROW):
+            grid_container.columnconfigure(col, weight=1)
+
+        for i, sub_folder in enumerate(sub_folders):
+            real_name = Path(json_manager[sub_folder.name]).name
+            images_folder = Path(sub_folder) / "result" / "predict"
+
+            # Фрейм для одного датасета
+            item_frame = tk.Frame(
+                grid_container,
+                width=ITEM_WIDTH,
+                height=ITEM_WIDTH + 60,
+                bg="white",
+                bd=1,
+                relief=tk.RAISED,
+                highlightbackground="#e0e0e0",
+                highlightthickness=1
+            )
+            item_frame.grid(
+                row=i // ITEMS_PER_ROW,
+                column=i % ITEMS_PER_ROW,
+                padx=10,
+                pady=10,
+                sticky="nsew"
+            )
+            item_frame.grid_propagate(False)
+
+            # Контейнер для изображения
+            img_container = tk.Frame(item_frame, bg="white", height=PREVIEW_SIZE + 10)
+            img_container.pack(fill=tk.X, pady=(25, 5))
+            img_container.pack_propagate(False)
+
+            # Загрузка превью изображения
+            image_files = (list(images_folder.glob("*.jpg")) +
+                           list(images_folder.glob("*.jpeg")) +
+                           list(images_folder.glob("*.png")))
+
+            if image_files:
+                try:
+                    img = Image.open(image_files[0])
+                    img.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE))
+                    photo = ImageTk.PhotoImage(img)
+
+                    img_label = tk.Label(img_container, image=photo, bg="white", cursor="hand")
+                    img_label.image = photo
+                    img_label.pack()
+                    img_label.bind("<Button-1>", lambda _, s=images_folder: self._open_dataset(s))
+                except Exception as e:
+                    print(f"Ошибка загрузки изображения: {e}")
+                    no_img = tk.Label(img_container, text="No preview", bg="white", fg="gray")
+                    no_img.pack(pady=20)
+
+            # Название датасета
+            name_label = tk.Label(
+                item_frame,
+                text=real_name,
+                bg="white",
+                wraplength=ITEM_WIDTH - 20,
+                cursor="hand"
+            )
+            name_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+
+            # Статистика и кнопка удаления
+            stat_frame = tk.Frame(item_frame, bg="white")
+            stat_frame.pack(fill=tk.X, pady=(0, 5))
+
+            # Кнопка редактирования (карандаш)
+            edit_btn = tk.Button(
+                stat_frame,
+                text="✏️",
+                fg="blue",
+                bg="white",
+                bd=0,
+                font=("Arial", 12, "bold"),
+                command=lambda s=images_folder: self._open_dataset(s)
+            )
+            edit_btn.pack(side=tk.RIGHT, padx=5)
+
+            # Кнопка удаления (крестик)
+            del_btn = tk.Button(
+                stat_frame,
+                text="×",
+                fg="red",
+                bg="white",
+                bd=0,
+                font=("Arial", 12, "bold"),
+                command=lambda s=images_folder: self._remove_tested_dataset(s)
+            )
+            del_btn.pack(side=tk.RIGHT, padx=5)
+
+    def _open_dataset(self, folder_path):
+        popover = AnnotationPopover(self.root, self, readonly=True)
+
+        # Центрируем Popover относительно главного окна
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
+        popover.geometry(f"+{x}+{y}")
+
+        # Пытаемся загрузить папку с картинками
+        try:
+            popover.load_folder(folder_path)
+        except NoImagesError as e:
+            e.show_tkinter_error()
+            popover.destroy()
+
+    def _remove_tested_dataset(self, folder_path):
+        self.deleter_test.delete_datasets([folder_path])
+        self._setup_tested_datasets_panel()
+
     def _safe_finalize_training(self):
         """Безопасное завершение обучения"""
 
@@ -686,6 +1208,22 @@ class ImageAnnotationApp:
                 if not getattr(self, 'training_cancelled', False):
                     messagebox.showinfo("Готово", "Обучение модели завершено!", parent=self.train_window)
                 self.train_window.destroy()
+                self._refresh_ui()
+
+        try:
+            self.root.after(0, finalize)
+        except:
+            pass
+
+    def _safe_finalize_testing(self):
+        """Безопасное завершение обучения"""
+
+        def finalize():
+            if hasattr(self, 'test_window') and self.test_window.winfo_exists():
+                if not getattr(self, 'testing_cancelled', False):
+                    messagebox.showinfo("Готово", "Тестирование модели завершено!", parent=self.test_window)
+                self.test_window.destroy()
+                self._refresh_ui()
 
         try:
             self.root.after(0, finalize)
@@ -814,7 +1352,7 @@ class ImageAnnotationApp:
                     img.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE))
                     photo = ImageTk.PhotoImage(img)
 
-                    img_label = tk.Label(img_container, image=photo, bg="white", cursor="hand2")
+                    img_label = tk.Label(img_container, image=photo, bg="white", cursor="hand")
                     img_label.image = photo
                     img_label.pack()
                     img_label.bind("<Button-1>", lambda _, s=sub_folder: self._modify_dataset(s))
@@ -829,7 +1367,7 @@ class ImageAnnotationApp:
                 text=real_name,
                 bg="white",
                 wraplength=ITEM_WIDTH - 20,
-                cursor="hand2"
+                cursor="hand"
             )
             name_label.pack(fill=tk.X, padx=5, pady=(0, 5))
             name_label.bind("<Button-1>", lambda _, s=sub_folder: self._modify_dataset(s))
@@ -872,6 +1410,25 @@ class ImageAnnotationApp:
             del_btn.pack(side=tk.RIGHT, padx=5)
 
             self.annotated_datasets.append(item_frame)
+
+    def get_tested_datasets(self):
+        """Загружает список протестированных датасетов"""
+        test_dir = DATA_DIR / "data" / "test"
+
+        # Очищаем предыдущие датасеты
+        for dataset in self.tested_datasets:
+            dataset.destroy()
+        self.tested_datasets = []
+
+        # Очищаем предыдущие элементы
+        for widget in self.tested_scrollable_frame.winfo_children():
+            widget.destroy()
+
+        if not test_dir.exists():
+            return
+
+        # Загружаем актуальные данные
+        self._setup_tested_datasets_panel()
 
     def _toggle_dataset_selection(self, dataset, var):
         """Переключает выбор датасета"""
@@ -980,12 +1537,14 @@ class ImageAnnotationApp:
 
     def _delete_single_dataset(self, dataset_folder):
         self.deleter.delete_datasets([dataset_folder])
+        self._refresh_ui()
 
     def _delete_selected_datasets(self):
         if not self.selected_datasets:
             messagebox.showwarning("Внимание", "Не выбраны датасеты для удаления")
             return
         self.deleter.delete_datasets(list(self.selected_datasets))
+        self._refresh_ui()
 
     def _translate_from_hash(self, hash_folder: Path):
         output_dir = DATA_DIR / "annotated_dataset"
