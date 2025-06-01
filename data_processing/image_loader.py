@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+
 from PIL import Image
 from typing import Optional, List
 
@@ -9,10 +11,11 @@ from utils.paths import DATA_DIR
 
 class ImageLoader:
     @log_method
-    def __init__(self, folder_path: str):
+    def __init__(self, folder_path: str, annotated_path=None):
         self.folder_path = folder_path
         self.image_files = self._get_image_files()
         self.current_index = -1
+        self.annotated_path = annotated_path
 
         self.get_first_unannotated_image()
 
@@ -20,7 +23,7 @@ class ImageLoader:
     def _get_image_files(self) -> List[str]:
         return list(sorted([
             f for f in os.listdir(self.folder_path)
-            if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+            if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))
         ]))
 
     @log_method
@@ -65,5 +68,7 @@ class ImageLoader:
     @log_method
     def get_current_image_path(self) -> Optional[str]:
         if 0 <= self.current_index < len(self.image_files):
-            return self.image_files[self.current_index]
+            path = self.image_files[self.current_index]
+
+            return path
         return None

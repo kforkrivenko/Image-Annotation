@@ -19,12 +19,13 @@ def get_unique_folder_name(source_path: Path) -> str:
 
 
 class AnnotationPopover(tk.Toplevel):
-    def __init__(self, parent, app, readonly=False):
+    def __init__(self, parent, app, readonly=False, annotated_path=None):
         super().__init__(parent)
         self.app = app
         self.title("Разметка датасета")
         self.geometry("1200x800")
         self.readonly = readonly
+        self.annotated_path = annotated_path
 
         # Блокируем главное окно
         self.grab_set()
@@ -176,18 +177,24 @@ class AnnotationPopover(tk.Toplevel):
         if folder_path:
             images = [
                 f for f in os.listdir(folder_path)
-                if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+                if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))
             ]
             if not images:
                 raise NoImagesError()
 
             if not path:
                 self._copy_to_folder_and_rename(folder_path)
-            self.image_loader = ImageLoader(self.folder_path)
+            self.image_loader = ImageLoader(
+                self.folder_path,
+                annotated_path=self.annotated_path
+            )
 
             self.canvas.image_loader = self.image_loader
 
-            self.annotation_saver = AnnotationSaver(self.folder_path)
+            self.annotation_saver = AnnotationSaver(
+                self.folder_path,
+                annotated_path=self.annotated_path
+            )
             self.canvas.annotation_saver = self.annotation_saver
             self._load_image()
         else:
@@ -220,7 +227,9 @@ class AnnotationPopover(tk.Toplevel):
                 self._update_status()
 
     def _load_existing_annotations(self, current_image_path):
+        print("_load_existing_annotations", current_image_path)
         annotations = self.annotation_saver.get_annotations(current_image_path)
+        print(annotations)
 
         for annotation in annotations:
             self.canvas.add_annotation(annotation)

@@ -18,6 +18,7 @@ from PIL import Image, ImageTk
 from data_processing.annotation_popover import AnnotationPopover, get_unique_folder_name
 from ml.yolo import ensure_model_downloaded, prepare_yolo_dataset
 from utils.dataset_deleter import DatasetDeleter
+from utils.dataset_download import download_dataset_with_notification
 from utils.json_manager import JsonManager, AnnotationFileManager
 
 from utils.paths import DATA_DIR
@@ -366,79 +367,6 @@ class ImageAnnotationApp:
             self._refresh_ui()
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка при загрузке файла: {str(e)}")
-
-    def _refresh_right_panel(self):
-        """Перестраивает правую панель после загрузки модели."""
-
-        # Очищаем старое содержимое
-        for widget in self.model_frame.winfo_children():
-            widget.destroy()
-
-        # Заново получаем список моделей
-        self.available_models = self._get_available_models()
-
-        # Заголовок "Выбор модели"
-        tk.Label(
-            self.model_frame,
-            text="Выбор модели:",
-            bg="white",
-            font=("Arial", 10)
-        ).pack(anchor="w")
-
-        # Комбобокс выбора модели
-        self.model_var = tk.StringVar(value=(self.available_models[0] if self.available_models else ""))
-        self.model_selector = ttk.Combobox(
-            self.model_frame,
-            textvariable=self.model_var,
-            values=self.available_models,
-            state="readonly" if self.available_models else "disabled"
-        )
-        self.model_selector.pack(fill=tk.X, pady=5)
-
-        # Блок кнопок скачивания (ВСЕГДА)
-        download_frame = tk.Frame(self.model_frame, bg="white")
-        download_frame.pack(fill=tk.X, pady=10)
-
-        tk.Label(
-            download_frame,
-            text="Скачать модели:",
-            bg="white",
-            font=("Arial", 9)
-        ).pack(anchor="w", pady=(0, 5))
-
-        tk.Button(
-            download_frame,
-            text="YOLOv8n",
-            command=lambda: self._download_model("yolov8n"),
-            bg="#e1e1e1"
-        ).pack(side=tk.LEFT, padx=5)
-
-        tk.Button(
-            download_frame,
-            text="YOLOv8s",
-            command=lambda: self._download_model("yolov8s"),
-            bg="#e1e1e1"
-        ).pack(side=tk.LEFT, padx=5)
-
-        tk.Button(
-            download_frame,
-            text="YOLOv8m",
-            command=lambda: self._download_model("yolov8m"),
-            bg="#e1e1e1"
-        ).pack(side=tk.LEFT, padx=5)
-
-        tk.Button(
-            download_frame,
-            text="YOLOv8m",
-            command=self._download_user_model,
-            bg="#e1e1e1"
-        ).pack(side=tk.LEFT, padx=5)
-
-        self.annotated_datasets = []
-        self.get_annotated_datasets()
-
-        self.tested_datasets = []
-        self.get_tested_datasets()
 
     def _open_training_popup(self):
         """Открывает окно настроек обучения"""
@@ -1083,7 +1011,7 @@ class ImageAnnotationApp:
 
         # Параметры сетки
         ITEMS_PER_ROW = 3
-        ITEM_WIDTH = 250
+        ITEM_WIDTH = 350
         PREVIEW_SIZE = 150
 
         # Контейнер для сетки
@@ -1095,6 +1023,7 @@ class ImageAnnotationApp:
             grid_container.columnconfigure(col, weight=1)
 
         for i, sub_folder in enumerate(sub_folders):
+            print("DEBUG", sub_folder.name)
             real_name = Path(json_manager[sub_folder.name]).name
             images_folder = Path(sub_folder) / "result" / "predict"
 
@@ -1124,9 +1053,14 @@ class ImageAnnotationApp:
             img_container.pack_propagate(False)
 
             # Загрузка превью изображения
-            image_files = (list(images_folder.glob("*.jpg")) +
-                           list(images_folder.glob("*.jpeg")) +
-                           list(images_folder.glob("*.png")))
+            image_files = list(
+                sorted(
+                    list(images_folder.glob("*.jpg")) +
+                    list(images_folder.glob("*.jpeg")) +
+                    list(images_folder.glob("*.png")) +
+                    list(images_folder.glob("*.gif"))
+                )
+            )
 
             if image_files:
                 try:
@@ -1153,19 +1087,18 @@ class ImageAnnotationApp:
             )
             name_label.pack(fill=tk.X, padx=5, pady=(0, 5))
 
-            # Статистика и кнопка удаления
             stat_frame = tk.Frame(item_frame, bg="white")
             stat_frame.pack(fill=tk.X, pady=(0, 5))
 
-            # Кнопка редактирования (карандаш)
+            # Кнопка скачивания
             edit_btn = tk.Button(
                 stat_frame,
-                text="✏️",
+                text="↓️",
                 fg="blue",
                 bg="white",
                 bd=0,
                 font=("Arial", 12, "bold"),
-                command=lambda s=images_folder: self._open_dataset(s)
+                command=lambda s=images_folder, test=True: self._download_dataset(s, test)
             )
             edit_btn.pack(side=tk.RIGHT, padx=5)
 
@@ -1182,7 +1115,22 @@ class ImageAnnotationApp:
             del_btn.pack(side=tk.RIGHT, padx=5)
 
     def _open_dataset(self, folder_path):
-        popover = AnnotationPopover(self.root, self, readonly=True)
+        output_dir = DATA_DIR / "annotated_dataset"
+        annotated_path = output_dir / folder_path.parent.parent.name
+
+        if annotated_path.exists():
+            popover = AnnotationPopover(
+                self.root,
+                self,
+                readonly=True,
+                annotated_path=annotated_path
+            )
+        else:
+            popover = AnnotationPopover(
+                self.root,
+                self,
+                readonly=True
+            )
 
         # Центрируем Popover относительно главного окна
         x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
@@ -1342,9 +1290,12 @@ class ImageAnnotationApp:
             img_container.pack_propagate(False)
 
             # Загрузка превью изображения
-            image_files = (list(sub_folder.glob("*.jpg")) +
-                           list(sub_folder.glob("*.jpeg")) +
-                           list(sub_folder.glob("*.png")))
+            image_files = list(sorted(
+                list(sub_folder.glob("*.jpg")) +
+                list(sub_folder.glob("*.jpeg")) +
+                list(sub_folder.glob("*.png")) +
+                list(sub_folder.glob("*.gif"))
+            ))
 
             if image_files:
                 try:
@@ -1372,7 +1323,7 @@ class ImageAnnotationApp:
             name_label.pack(fill=tk.X, padx=5, pady=(0, 5))
             name_label.bind("<Button-1>", lambda _, s=sub_folder: self._modify_dataset(s))
 
-            # Статистика и кнопка удаления
+            # Статистика и кнопки управления
             stat_frame = tk.Frame(item_frame, bg="white")
             stat_frame.pack(fill=tk.X, pady=(0, 5))
 
@@ -1385,6 +1336,18 @@ class ImageAnnotationApp:
             )
             stat_label.pack(side=tk.LEFT, padx=5)
 
+            # Кнопка скачивания (стрелка вниз)
+            download_btn = tk.Button(
+                stat_frame,
+                text="↓",
+                fg="green",
+                bg="white",
+                bd=0,
+                font=("Arial", 12, "bold"),
+                command=lambda s=sub_folder: self._download_dataset(s)
+            )
+            download_btn.pack(side=tk.RIGHT, padx=2)
+
             # Кнопка редактирования (карандаш)
             edit_btn = tk.Button(
                 stat_frame,
@@ -1395,7 +1358,7 @@ class ImageAnnotationApp:
                 font=("Arial", 12, "bold"),
                 command=lambda s=sub_folder: self._edit_dataset(s)
             )
-            edit_btn.pack(side=tk.RIGHT, padx=5)
+            edit_btn.pack(side=tk.RIGHT, padx=2)
 
             # Кнопка удаления (крестик)
             del_btn = tk.Button(
@@ -1407,9 +1370,82 @@ class ImageAnnotationApp:
                 font=("Arial", 12, "bold"),
                 command=lambda s=sub_folder: self._delete_single_dataset(s)
             )
-            del_btn.pack(side=tk.RIGHT, padx=5)
+            del_btn.pack(side=tk.RIGHT, padx=2)
 
             self.annotated_datasets.append(item_frame)
+
+    def _download_dataset(self, dataset_folder, test=False):
+        """Метод для вызова из интерфейса"""
+        output_dir = DATA_DIR / "annotated_dataset"
+        hash_to_name_manager = JsonManager(os.path.join(output_dir, 'hash_to_name.json'))
+        annotations_manager = JsonManager(os.path.join(output_dir, 'annotations.json'))
+        blazons_manager = JsonManager(os.path.join(output_dir, 'blazons.json'))
+        if not test:
+            real_name = Path(hash_to_name_manager[dataset_folder.name]).name
+            annotations = annotations_manager[str(output_dir / dataset_folder.name)] #  TODO: нужно ключи сделать только хэш
+            blazons = blazons_manager[dataset_folder.name]
+        else:
+            real_name = Path(hash_to_name_manager[dataset_folder.parent.parent.name]).name
+            annotations = None
+            blazons = None
+
+        # Показываем индикатор загрузки
+        self._show_loading_indicator()
+
+        def download_complete_callback(success):
+            """Коллбек для закрытия окна загрузки"""
+            self.root.after(0, self.loading_popup.destroy)
+            if success:
+                messagebox.showinfo("Готово", f"Датасет '{real_name}' успешно скачан в папку Downloads!",
+                                    parent=self.root)
+
+        extra_data = [
+            (annotations, 'annotations.json'),
+            (blazons, 'blazons.json')
+        ]
+        # Запускаем в отделчьном потоке
+        threading.Thread(
+            target=lambda: download_dataset_with_notification(
+                self.root,
+                dataset_folder,
+                real_name,
+                extra_data,  # Аннотации и блазоны, если есть
+                download_complete_callback
+            ),
+            daemon=True
+        ).start()
+
+    def _show_loading_indicator(self):
+        """Показывает индикатор загрузки"""
+        self.loading_popup = tk.Toplevel(self.root)
+        self.loading_popup.title("Подождите...")
+        self.loading_popup.geometry("300x100")
+
+        tk.Label(
+            self.loading_popup,
+            text="Идет создание архива...",
+            font=('Arial', 11)
+        ).pack(pady=10)
+
+        progress = ttk.Progressbar(
+            self.loading_popup,
+            mode='indeterminate',
+            length=200
+        )
+        progress.pack()
+        progress.start()
+
+        # Центрируем окно
+        self._center_window(self.loading_popup)
+
+    def _center_window(self, window):
+        """Центрирует окно на экране"""
+        window.update_idletasks()
+        width = window.winfo_width()
+        height = window.winfo_height()
+        x = (window.winfo_screenwidth() // 2) - (width // 2)
+        y = (window.winfo_screenheight() // 2) - (height // 2)
+        window.geometry(f'+{x}+{y}')
 
     def get_tested_datasets(self):
         """Загружает список протестированных датасетов"""
@@ -1565,7 +1601,7 @@ class ImageAnnotationApp:
 
         imgs = len([
             f for f in os.listdir(folder)
-            if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+            if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))
         ])
 
         annotated_imgs = len(json_manager.get_folder_info(str(folder)).keys())

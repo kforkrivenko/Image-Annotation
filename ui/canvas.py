@@ -108,13 +108,13 @@ class AnnotationCanvas(tk.Canvas):
 
     def _update_annotation_display(self, annotation):
         """Обновляет визуальное отображение аннотации на Canvas"""
-        # 1. Удаляем старые элементы
+        # Удаляем старые элементы
         self.delete(annotation.rect)  # Удаляем прямоугольник
         if hasattr(annotation, 'text_id'):
             self.delete(annotation.text_id)  # Удаляем старую текстовую метку
             self._delete_annotation_from_file(annotation)
 
-        # 2. Пересчитываем координаты с учетом текущего масштаба
+        # Пересчитываем координаты с учетом текущего масштаба
         ratio = self.ratio if hasattr(self, 'ratio') else 1.0
         coords = [
             annotation.coords[0] * ratio,
@@ -123,14 +123,14 @@ class AnnotationCanvas(tk.Canvas):
             annotation.coords[3] * ratio
         ]
 
-        # 3. Перерисовываем прямоугольник
+        # Перерисовываем прямоугольник
         annotation.rect = self.create_rectangle(
             *coords,
             outline='red',
             width=2
         )
 
-        # 4. Перерисовываем текстовую метку
+        # Перерисовываем текстовую метку
         x_center = (coords[0] + coords[2]) / 2
         y_center = (coords[1] + coords[3]) / 2
 
@@ -141,7 +141,7 @@ class AnnotationCanvas(tk.Canvas):
             font=('Arial', 10, 'bold')
         )
 
-        # 5. Обновляем ссылки в списке аннотаций
+        # Обновляем ссылки в списке аннотаций
         for i, ann in enumerate(self.annotations):
             if ann == annotation:
                 self.annotations[i] = annotation
@@ -286,17 +286,17 @@ class AnnotationCanvas(tk.Canvas):
     @log_method
     def _redraw_all_annotations(self):
         """Полная перерисовка всех элементов"""
-        # 1. Сохраняем текущее изображение
+        # Сохраняем текущее изображение
         current_image = self.image
 
-        # 2. Полностью очищаем Canvas
+        # Полностью очищаем Canvas
         self.delete("all")
 
-        # 3. Восстанавливаем изображение (если было)
+        # Восстанавливаем изображение (если было)
         if current_image:
             self._draw_image(self.image, self.image_path)
 
-        # 4. Перерисовываем все аннотации
+        # Перерисовываем все аннотации
         for ann in self.annotations:
             ann.rect = self.create_rectangle(*ann.coords, outline="red", width=2)
             x_center = (ann.coords[0] + ann.coords[2]) / 2

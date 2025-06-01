@@ -98,7 +98,15 @@ class AnnotationFileManager(JsonManager):
 
     def get_file_info(self, folder: str, file: str) -> List[Any]:
         """Получить информацию о файле: `info = manager.get_file_info('папка', 'файл')`."""
-        return self.data.get(folder, {}).get(file, [])
+        res = self.data.get(folder, {}).get(file, [])
+        if not res:
+            for any_format in ['.jpeg', '.jpg', '.png', '.gif']:
+                without_format = '.'.join(file.split('.')[:-1]) + any_format
+                if without_format in self.data.get(folder, {}).keys():
+                    return self.data.get(folder, {}).get(without_format, [])
+            return []
+        else:
+            return res
 
     def get_folder_info(self, folder: str) -> Dict[str, List[Any]]:
         """Получить информацию о файле: `info = manager.get_file_info('папка', 'файл')`."""
