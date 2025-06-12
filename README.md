@@ -23,7 +23,7 @@
 
 1. Клонировать репозиторий:
    ```bash
-   git clone https://github.com/ваш-профиль/ImageAnnotation.git
+   git clone git@github.com:kforkrivenko/nn_custom_train_tool.git
    cd ImageAnnotation
 
 2. Создать виртуальное окружение и установить зависимости:
