@@ -88,19 +88,21 @@ class AnnotationPopover(tk.Toplevel):
         control_frame = ttk.Frame(left_frame)
         control_frame.pack(fill=tk.X, pady=10)
 
-        ttk.Button(
+        self.prev_button = ttk.Button(
             control_frame,
             text="← Назад",
             style="Popover.TButton",
             command=self._prev_image
-        ).pack(side=tk.LEFT, padx=5)
+        )
+        self.prev_button.pack(side=tk.LEFT, padx=5)
 
-        ttk.Button(
+        self.next_button = ttk.Button(
             control_frame,
             text="Вперед →",
             style="Popover.TButton",
             command=self._next_image
-        ).pack(side=tk.LEFT, padx=5)
+        )
+        self.next_button.pack(side=tk.LEFT, padx=5)
 
         self.status_var = tk.StringVar()
         ttk.Label(
@@ -242,9 +244,15 @@ class AnnotationPopover(tk.Toplevel):
 
     def _update_status(self):
         if self.image_loader:
+            current_index = self.image_loader.current_index
+            total_images = len(self.image_loader.image_files)
             self.status_var.set(
-                f"Изображение {self.image_loader.current_index + 1}/{len(self.image_loader.image_files)}"
+                f"Изображение {current_index + 1}/{total_images}"
             )
+            
+            # Update button states
+            self.prev_button.configure(state='normal' if current_index > 0 else 'disabled')
+            self.next_button.configure(state='normal' if current_index < total_images - 1 else 'disabled')
 
     def close(self):
         self.destroy()
