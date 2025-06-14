@@ -105,6 +105,7 @@ class DatasetDeleter:
             self.queue.put(("complete", task_id))
         except Exception as e:
             self.queue.put(("error", f"Critical error: {str(e)}"))
+            self.queue.put(("complete", task_id))
 
     def _show_progress(self, total):
         if self.progress_window:
@@ -152,13 +153,17 @@ class DatasetDeleter:
 
             if msg_type == "progress":
                 current, total = data
-                self.progress_bar["value"] = current
-                self.progress_label.config(text=f"Удаление {current} из {total}")
-                self.progress_window.update_idletasks()
+                if self.progress_window and self.progress_bar.winfo_exists():
+                    self.progress_bar["value"] = current
+                    self.progress_label.config(text=f"Удаление {current} из {total}")
+                    self.progress_window.update_idletasks()
 
             elif msg_type == "error":
                 error_msg = data[0]
                 print(f"Ошибка удаления: {error_msg}")
+                if "Critical error" in error_msg:
+                    self._cleanup()
+                    return
 
             elif msg_type == "complete":
                 task_id = data[0]
@@ -169,7 +174,7 @@ class DatasetDeleter:
         except queue.Empty:
             pass
 
-        if self.is_running:
+        if self.is_running and self.progress_window and self.progress_window.winfo_exists():
             self.master.after(100, self._monitor_progress)
 
     def _cleanup(self):

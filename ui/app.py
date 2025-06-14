@@ -15,6 +15,7 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 from pathlib import Path
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 import zipfile
+import json
 
 from data_processing.annotation_popover import AnnotationPopover, get_unique_folder_name
 from ml.yolo import ensure_model_downloaded, prepare_yolo_dataset
@@ -1454,10 +1455,13 @@ class ImageAnnotationApp:
 
             # Копируем и аннотируем каждое изображение
             for image_path in dataset_folder.glob('*'):
-                if image_path.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                if image_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']:
                     print(f"\nОбработка изображения: {image_path}")
                     # Открываем изображение
                     img = Image.open(image_path)
+                    img = img.convert('RGB')
+
+                    print(f"{image_path.name} — mode: {img.mode}")
                     draw = ImageDraw.Draw(img)
                     
                     # Получаем аннотации для текущего изображения по имени файла
@@ -1679,8 +1683,9 @@ class ImageAnnotationApp:
             messagebox.showerror("Ошибка", f"Ошибка при объединении: {str(e)}", parent=self.root)
 
     def _delete_single_dataset(self, dataset_folder):
+        print(f"[DEBUG] _delete_single_dataset called. deleter id: {id(self.deleter)}, is_running: {getattr(self.deleter, 'is_running', None)}")
         self.deleter.delete_datasets([dataset_folder])
-        self._refresh_ui()
+        # self._refresh_ui()  # УБРАТЬ эту строку!
 
     def _delete_selected_datasets(self):
         if not self.selected_datasets:
@@ -1731,20 +1736,76 @@ class ImageAnnotationApp:
             popover.destroy()
 
     def _show_popover(self):
-        """Показывает Popover с интерфейсом разметки"""
-        popover = AnnotationPopover(self.root, self)
+        """Автоматически определяет: папка для разметки или zip с аннотациями"""
+        path = filedialog.askopenfilename(
+            title="Выберите папку с картинками или .zip архив с размеченным датасетом",
+            filetypes=[('Папка или zip', '*'), ('Zip files', '*.zip')],
+            parent=self.root
+        )
+        if not path:
+            return
+        path_obj = Path(path)
+        if path_obj.is_file() and path_obj.suffix.lower() == '.zip':
+            self._import_annotated_zip(path)
+        elif path_obj.is_dir() or (os.path.isdir(path)):
+            popover = AnnotationPopover(self.root, self)
+            x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
+            y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
+            popover.geometry(f"+{x}+{y}")
+            try:
+                popover.load_folder(path)
+            except NoImagesError as e:
+                e.show_tkinter_error()
+                popover.destroy()
+        else:
+            # Если выбрали файл, но не zip, пробуем открыть его как папку (например, drag&drop)
+            if os.path.isdir(path):
+                popover = AnnotationPopover(self.root, self)
+                x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
+                y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
+                popover.geometry(f"+{x}+{y}")
+                try:
+                    popover.load_folder(path)
+                except NoImagesError as e:
+                    e.show_tkinter_error()
+                    popover.destroy()
+            else:
+                messagebox.showerror("Ошибка", "Выберите папку с картинками или .zip архив с размеченным датасетом.")
 
-        # Центрируем Popover относительно главного окна
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
-        popover.geometry(f"+{x}+{y}")
-
-        # Пытаемся загрузить папку с картинками
-        try:
-            popover.load_folder()
-        except NoImagesError as e:
-            e.show_tkinter_error()
-            popover.destroy()
+    def _import_annotated_zip(self, zip_path):
+        """Импортирует размеченный датасет из zip-архива"""
+        import json
+        temp_dir = Path(tempfile.mkdtemp())
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        # Ищем изображения и annotations.json
+        images = [f for f in temp_dir.iterdir() if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']]
+        annotations_file = temp_dir / 'annotations.json'
+        if not images or not annotations_file.exists():
+            messagebox.showerror("Ошибка", "В архиве должны быть картинки и файл annotations.json")
+            shutil.rmtree(temp_dir)
+            return
+        # Копируем изображения в новую папку
+        output_dir = DATA_DIR / 'annotated_dataset'
+        hash_name = get_unique_folder_name(temp_dir)
+        dst_path = output_dir / hash_name
+        shutil.copytree(temp_dir, dst_path, dirs_exist_ok=True)
+        # Объединяем аннотации
+        annotations_manager = JsonManager(output_dir / 'annotations.json')
+        with open(annotations_file, 'r', encoding='utf-8') as f:
+            new_annotations = json.load(f)
+        # new_annotations: {image_name: [anns]}
+        for image_name, anns in new_annotations.items():
+            annotations_manager.data.setdefault(str(dst_path), {}).setdefault(image_name, []).extend(anns)
+        annotations_manager.save()
+        # Добавляем в hash_to_name.json
+        hash_to_name_manager = JsonManager(output_dir / 'hash_to_name.json')
+        hash_to_name_manager[hash_name] = str(temp_dir)
+        hash_to_name_manager.save()
+        # Обновляем список датасетов
+        self.get_annotated_datasets()
+        messagebox.showinfo("Готово", "Размеченный датасет успешно импортирован!", parent=self.root)
+        shutil.rmtree(temp_dir)
 
     def _show_gdrive_folder_selector(self):
         """Всплывающее окно с множественным выбором папок"""
