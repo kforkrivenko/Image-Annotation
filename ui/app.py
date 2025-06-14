@@ -13,7 +13,8 @@ from ultralytics import YOLO
 from api.api import get_dataset, get_datasets_info
 from tkinter import ttk, filedialog, messagebox, simpledialog
 from pathlib import Path
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw, ImageFont
+import zipfile
 
 from data_processing.annotation_popover import AnnotationPopover, get_unique_folder_name
 from ml.yolo import ensure_model_downloaded, prepare_yolo_dataset
@@ -1382,12 +1383,24 @@ class ImageAnnotationApp:
         blazons_manager = JsonManager(os.path.join(output_dir, 'blazons.json'))
         if not test:
             real_name = Path(hash_to_name_manager[dataset_folder.name]).name
-            annotations = annotations_manager[str(output_dir / dataset_folder.name)] #  TODO: нужно ключи сделать только хэш
+            # Получаем аннотации для всего датасета
+            dataset_path = str(output_dir / dataset_folder.name)
+            annotations = annotations_manager[dataset_path] or {}
+            print(f"Загруженные аннотации: {annotations}")
             blazons = blazons_manager[dataset_folder.name]
         else:
             real_name = Path(hash_to_name_manager[dataset_folder.parent.parent.name]).name
             annotations = None
             blazons = None
+
+        # Спрашиваем пользователя о формате скачивания
+        format_choice = messagebox.askyesno(
+            "Выбор формата",
+            "Выберите формат скачивания:\n\n"
+            "Да - скачать аннотированные изображения (разметка будет на картинках)\n"
+            "Нет - скачать оригинальные изображения + JSON файлы",
+            parent=self.root
+        )
 
         # Показываем индикатор загрузки
         self._show_loading_indicator()
@@ -1399,21 +1412,115 @@ class ImageAnnotationApp:
                 messagebox.showinfo("Готово", f"Датасет '{real_name}' успешно скачан в папку Downloads!",
                                     parent=self.root)
 
-        extra_data = [
-            (annotations, 'annotations.json'),
-            (blazons, 'blazons.json')
-        ]
-        # Запускаем в отделчьном потоке
-        threading.Thread(
-            target=lambda: download_dataset_with_notification(
-                self.root,
-                dataset_folder,
-                real_name,
-                extra_data,  # Аннотации и блазоны, если есть
-                download_complete_callback
-            ),
-            daemon=True
-        ).start()
+        if format_choice:
+            # Скачиваем аннотированные изображения
+            threading.Thread(
+                target=lambda: self._download_annotated_images(
+                    dataset_folder,
+                    real_name,
+                    annotations,
+                    download_complete_callback
+                ),
+                daemon=True
+            ).start()
+        else:
+            # Скачиваем оригинальные изображения + JSON
+            extra_data = [
+                (annotations, 'annotations.json'),
+                (blazons, 'blazons.json')
+            ]
+            threading.Thread(
+                target=lambda: download_dataset_with_notification(
+                    self.root,
+                    dataset_folder,
+                    real_name,
+                    extra_data,
+                    download_complete_callback
+                ),
+                daemon=True
+            ).start()
+
+    def _download_annotated_images(self, dataset_folder, real_name, annotations, callback):
+        """Скачивает датасет с аннотированными изображениями"""
+        try:
+            print("Начинаем скачивание аннотированных изображений")
+            print(f"Путь к датасету: {dataset_folder}")
+            print(f"Аннотации: {annotations}")
+
+            # Создаем временную директорию
+            temp_dir = Path(tempfile.mkdtemp())
+            output_dir = temp_dir / real_name
+            output_dir.mkdir(parents=True)
+
+            # Копируем и аннотируем каждое изображение
+            for image_path in dataset_folder.glob('*'):
+                if image_path.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                    print(f"\nОбработка изображения: {image_path}")
+                    # Открываем изображение
+                    img = Image.open(image_path)
+                    draw = ImageDraw.Draw(img)
+                    
+                    # Получаем аннотации для текущего изображения по имени файла
+                    image_name = image_path.name
+                    image_annotations = annotations.get(image_name, [])
+                    print(f"Аннотации для изображения {image_name}: {image_annotations}")
+                    
+                    # Рисуем аннотации на изображении
+                    for ann in image_annotations:
+                        print(f"Обработка аннотации: {ann}")
+                        coords = ann['coords']
+                        label = ann['text']
+                        ratio = ann.get('ratio', 1.0)
+                        # Преобразуем координаты обратно в оригинальный размер
+                        x1 = coords[0] / ratio
+                        y1 = coords[1] / ratio
+                        x2 = coords[2] / ratio
+                        y2 = coords[3] / ratio
+                        print(f"Координаты (оригинал): {x1}, {y1}, {x2}, {y2}, ratio: {ratio}")
+                        # Рисуем прямоугольник
+                        draw.rectangle([x1, y1, x2, y2], outline='red', width=2)
+                        # Рисуем текст
+                        x_center = (x1 + x2) / 2
+                        y_center = (y1 + y2) / 2
+                        font = ImageFont.truetype("Arial", 14)
+                        text_bbox = draw.textbbox((x_center, y_center), label, font=font, anchor="mm")
+                        draw.rectangle(
+                            [text_bbox[0]-2, text_bbox[1]-2, text_bbox[2]+2, text_bbox[3]+2],
+                            fill='white'
+                        )
+                        draw.text(
+                            (x_center, y_center),
+                            label,
+                            fill='red',
+                            font=font,
+                            anchor="mm"
+                        )
+                    # Сохраняем аннотированное изображение
+                    output_path = output_dir / image_path.name
+                    img.save(output_path)
+                    print(f"Изображение сохранено: {output_path}")
+
+            # Создаем архив
+            downloads_dir = Path.home() / "Downloads"
+            archive_path = downloads_dir / f"{real_name}_annotated.zip"
+            print(f"\nСоздание архива: {archive_path}")
+            
+            with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file in output_dir.rglob('*'):
+                    if file.is_file():
+                        zipf.write(file, file.relative_to(output_dir))
+                        print(f"Добавлен в архив: {file}")
+
+            # Удаляем временную директорию
+            shutil.rmtree(temp_dir)
+            print("\nВременная директория удалена")
+            
+            callback(True)
+        except Exception as e:
+            print(f"Ошибка при скачивании аннотированных изображений: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            callback(False)
 
     def _show_loading_indicator(self):
         """Показывает индикатор загрузки"""
