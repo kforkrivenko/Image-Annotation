@@ -10,11 +10,9 @@ from time import sleep
 from api.api import get_dataset, get_datasets_info
 from tkinter import ttk, filedialog, messagebox, simpledialog
 from pathlib import Path
-from PIL import Image, ImageTk, ImageDraw, ImageFont
 import zipfile
 
 from data_processing.annotation_popover import AnnotationPopover, get_unique_folder_name
-from ml.yolo import ensure_model_downloaded, prepare_yolo_dataset
 from utils.dataset_deleter import DatasetDeleter
 from utils.dataset_download import download_dataset_with_notification
 from utils.json_manager import JsonManager, AnnotationFileManager
@@ -337,6 +335,7 @@ class ImageAnnotationApp:
 
     def _download_model(self, model_name):
         """Cкачивания модели."""
+        from ml.yolo import ensure_model_downloaded
         _ = ensure_model_downloaded(model_name)
         #  model = YOLO(model_path)
 
@@ -787,6 +786,7 @@ class ImageAnnotationApp:
 
     def _start_training(self, popup, batch, epochs, imgsz, workers, model_name, device, class_vars, datasets):
         """Запускает обучение в отдельном потоке"""
+        from ml.yolo import prepare_yolo_dataset
         self.training_cancelled = False
         try:
             batch = int(batch)
@@ -1068,6 +1068,7 @@ class ImageAnnotationApp:
 
             if image_files:
                 try:
+                    from PIL import Image, ImageTk
                     img = Image.open(image_files[0])
                     img.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE))
                     photo = ImageTk.PhotoImage(img)
@@ -1303,6 +1304,7 @@ class ImageAnnotationApp:
 
             if image_files:
                 try:
+                    from PIL import Image, ImageTk
                     img = Image.open(image_files[0])
                     img.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE))
                     photo = ImageTk.PhotoImage(img)
@@ -1460,6 +1462,7 @@ class ImageAnnotationApp:
                 if image_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']:
                     print(f"\nОбработка изображения: {image_path}")
                     # Открываем изображение
+                    from PIL import Image, ImageDraw, ImageFont
                     img = Image.open(image_path)
                     img = img.convert('RGB')
 
@@ -1998,6 +2001,7 @@ class ImageAnnotationApp:
                 os.makedirs(output_dir / hash_name, exist_ok=True)
 
             for i, (img, blazon, name) in enumerate(images):
+                from PIL import Image
                 if not isinstance(img, Image.Image):
                     print(f"Элемент с индексом {i} не является изображением PIL")
                     continue

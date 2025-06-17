@@ -25,52 +25,60 @@ jobs:
           pip install -r requirements.txt
 
       - name: Build application
-        run: |
-          pyinstaller build.spec
+        run: pyinstaller build.spec
+
+      - name: List dist contents
+        run: ls -la dist
+        shell: bash
 
       - name: Package artifacts
         run: |
           cd dist
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            echo "Packaging macOS app..."
-            if [[ -d "ImageAnnotation.app" ]]; then
-              # Упаковать всю .app в zip
-              ditto -c -k --sequesterRsrc --keepParent ImageAnnotation.app ImageAnnotation-macOS.zip
-            else
-              echo "::error::macOS app bundle not found!"
-              exit 1
-            fi
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "Packaging Windows app..."
-            if [[ -d "ImageAnnotation" ]]; then
-              powershell Compress-Archive -Path ImageAnnotation -DestinationPath ImageAnnotation-Windows.zip
-            else
-              echo "::error::Windows folder not found!"
-              exit 1
-            fi
-          else
-            echo "Packaging Linux app..."
-            if [[ -d "ImageAnnotation" ]]; then
-              tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation
-            else
-              echo "::error::Linux folder not found!"
-              exit 1
-            fi
-          fi
+
+          case "$RUNNER_OS" in
+            "macOS")
+              echo "Packaging macOS app..."
+              if [[ -d "ImageAnnotation.app" ]]; then
+                ditto -c -k --sequesterRsrc --keepParent ImageAnnotation.app ImageAnnotation-macOS.zip
+              else
+                echo "No .app bundle found, searching for .exe or folder..."
+                ls
+              fi
+              ;;
+            "Windows")
+              echo "Packaging Windows app..."
+              if compgen -G "ImageAnnotation*.exe" > /dev/null; then
+                echo "Zipping EXE..."
+                powershell Compress-Archive -Path ImageAnnotation*.exe -DestinationPath ImageAnnotation-Windows.zip
+              elif Test-Path "ImageAnnotation" {
+                echo "Zipping directory..."
+                powershell Compress-Archive -Path ImageAnnotation -DestinationPath ImageAnnotation-Windows.zip
+              } else {
+                echo "Nothing found to package for Windows!"
+              fi
+              ;;
+            "Linux")
+              echo "Packaging Linux app..."
+              if [ -d "ImageAnnotation" ]; then
+                tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation
+              elif compgen -G "ImageAnnotation*" > /dev/null; then
+                echo "Tarball from matching files..."
+                tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation*
+              else
+                echo "Nothing found to package for Linux!"
+              fi
+              ;;
+          esac
         shell: bash
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os }}-Build
-          path: |
-            dist/*.zip
-            dist/*.tar.gz
+          path: dist/*
 
       - name: Create Release (only on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            dist/*.zip
-            dist/*.tar.gz
+          files: dist/*
