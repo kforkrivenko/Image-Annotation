@@ -1743,38 +1743,20 @@ class ImageAnnotationApp:
             popover.destroy()
 
     def _show_popover(self):
-        answer = messagebox.askyesno(
-            "Выбор источника",
-            "Хотите загрузить папку с картинками для разметки?\n(Нет — выбрать .zip архив с размеченным датасетом)",
-            parent=self.root
-        )
-        if answer:
-            folder = filedialog.askdirectory(
-                title="Выберите папку с картинками для разметки",
-                parent=self.root
-            )
-            if folder:
-                popover = AnnotationPopover(self.root, self)
-                x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
-                y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
-                popover.geometry(f"+{x}+{y}")
-                try:
-                    popover.load_folder(folder)
-                except NoImagesError as e:
-                    e.show_tkinter_error()
-                    popover.destroy()
-            else:
-                messagebox.showerror("Ошибка", "Папка не выбрана.")
-        else:
-            path = filedialog.askopenfilename(
-                title="Выберите .zip архив с размеченным датасетом",
-                filetypes=[('Zip files', '*.zip')],
-                parent=self.root
-            )
-            if path and Path(path).suffix.lower() == '.zip':
-                self._import_annotated_zip(path)
-            else:
-                messagebox.showerror("Ошибка", "Файл не выбран или не .zip.")
+        """Показывает Popover с интерфейсом разметки"""
+        popover = AnnotationPopover(self.root, self)
+
+        # Центрируем Popover относительно главного окна
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
+        popover.geometry(f"+{x}+{y}")
+
+        # Пытаемся загрузить папку с картинками
+        try:
+            popover.load_folder()
+        except NoImagesError as e:
+            e.show_tkinter_error()
+            popover.destroy()
 
     def _import_annotated_zip(self, zip_path):
         """Импортирует размеченный датасет из zip-архива"""

@@ -186,7 +186,8 @@ class AnnotationPopover(tk.Toplevel):
             
             print("images: ", images)
 
-            self._copy_to_folder_and_rename(folder_path)
+            if not path:
+                self._copy_to_folder_and_rename(folder_path)
             self.image_loader = ImageLoader(
                 self.folder_path,
                 annotated_path=self.annotated_path
