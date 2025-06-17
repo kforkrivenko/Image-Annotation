@@ -21,6 +21,7 @@
 
 ## Установка
 
+### Вариант первый
 1. Клонировать репозиторий:
    ```bash
    git clone git@github.com:kforkrivenko/Image-Annotation.git
@@ -29,7 +30,7 @@
 2. Создать виртуальное окружение и установить зависимости:
 
 ```bash
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate    # или venv\Scripts\activate на Windows
 pip install -r requirements.txt
 ```
@@ -41,6 +42,19 @@ pip install -r requirements.txt
 ```
 
 Откроется интерфейс, в котором можно загрузить изображения, создавать аннотации, запускать модель YOLO и экспортировать результаты.
+
+### Вариант второй
+
+1. 
+Перейти по https://github.com/kforkrivenko/Image-Annotation/actions
+
+2.
+Выбрать последний коммит -> скачать артефакт под нужную архитектуру
+
+3. 
+Распаковать и открыть.
+
+Первый раз может открываться долго: 1-2 минуты
 
 ## Структура проекта
 

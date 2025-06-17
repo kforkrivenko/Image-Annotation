@@ -938,6 +938,7 @@ class ImageAnnotationApp:
 
     def _start_testing(self, popup, class_vars, datasets, batch, imgsz, conf, iou, device):
         # Создаем окно для отображения прогресса
+        from ml.yolo import prepare_yolo_dataset
         self.testing_cancelled = False
         try:
             batch = int(batch)
