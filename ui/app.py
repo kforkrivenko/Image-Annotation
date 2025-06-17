@@ -1743,41 +1743,38 @@ class ImageAnnotationApp:
             popover.destroy()
 
     def _show_popover(self):
-        """Автоматически определяет: папка для разметки или zip с аннотациями"""
-        path = filedialog.askopenfilename(
-            title="Выберите папку с картинками или .zip архив с размеченным датасетом",
-            filetypes=[('Папка или zip', '*'), ('Zip files', '*.zip')],
+        answer = messagebox.askyesno(
+            "Выбор источника",
+            "Хотите загрузить папку с картинками для разметки?\n(Нет — выбрать .zip архив с размеченным датасетом)",
             parent=self.root
         )
-        if not path:
-            return
-        path_obj = Path(path)
-        if path_obj.is_file() and path_obj.suffix.lower() == '.zip':
-            self._import_annotated_zip(path)
-        elif path_obj.is_dir() or (os.path.isdir(path)):
-            popover = AnnotationPopover(self.root, self)
-            x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
-            y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
-            popover.geometry(f"+{x}+{y}")
-            try:
-                popover.load_folder(path)
-            except NoImagesError as e:
-                e.show_tkinter_error()
-                popover.destroy()
-        else:
-            # Если выбрали файл, но не zip, пробуем открыть его как папку (например, drag&drop)
-            if os.path.isdir(path):
+        if answer:
+            folder = filedialog.askdirectory(
+                title="Выберите папку с картинками для разметки",
+                parent=self.root
+            )
+            if folder:
                 popover = AnnotationPopover(self.root, self)
                 x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 600
                 y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
                 popover.geometry(f"+{x}+{y}")
                 try:
-                    popover.load_folder(path)
+                    popover.load_folder(folder)
                 except NoImagesError as e:
                     e.show_tkinter_error()
                     popover.destroy()
             else:
-                messagebox.showerror("Ошибка", "Выберите папку с картинками или .zip архив с размеченным датасетом.")
+                messagebox.showerror("Ошибка", "Папка не выбрана.")
+        else:
+            path = filedialog.askopenfilename(
+                title="Выберите .zip архив с размеченным датасетом",
+                filetypes=[('Zip files', '*.zip')],
+                parent=self.root
+            )
+            if path and Path(path).suffix.lower() == '.zip':
+                self._import_annotated_zip(path)
+            else:
+                messagebox.showerror("Ошибка", "Файл не выбран или не .zip.")
 
     def _import_annotated_zip(self, zip_path):
         """Импортирует размеченный датасет из zip-архива"""
