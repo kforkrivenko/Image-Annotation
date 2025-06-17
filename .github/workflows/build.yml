@@ -28,57 +28,59 @@ jobs:
         run: pyinstaller build.spec
 
       - name: List dist contents
-        run: ls -la dist
-        shell: bash
+        run: |
+          echo "::group::dist/"
+          ls -R dist || true
+          echo "::endgroup::"
 
       - name: Package artifacts
         run: |
           cd dist
 
-          case "$RUNNER_OS" in
-            "macOS")
-              echo "Packaging macOS app..."
-              if [[ -d "ImageAnnotation.app" ]]; then
-                ditto -c -k --sequesterRsrc --keepParent ImageAnnotation.app ImageAnnotation-macOS.zip
-              else
-                echo "No .app bundle found, searching for .exe or folder..."
-                ls
-              fi
-              ;;
-            "Windows")
-              echo "Packaging Windows app..."
-              if compgen -G "ImageAnnotation*.exe" > /dev/null; then
-                echo "Zipping EXE..."
-                powershell Compress-Archive -Path ImageAnnotation*.exe -DestinationPath ImageAnnotation-Windows.zip
-              elif Test-Path "ImageAnnotation" {
-                echo "Zipping directory..."
-                powershell Compress-Archive -Path ImageAnnotation -DestinationPath ImageAnnotation-Windows.zip
-              } else {
-                echo "Nothing found to package for Windows!"
-              fi
-              ;;
-            "Linux")
-              echo "Packaging Linux app..."
-              if [ -d "ImageAnnotation" ]; then
-                tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation
-              elif compgen -G "ImageAnnotation*" > /dev/null; then
-                echo "Tarball from matching files..."
-                tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation*
-              else
-                echo "Nothing found to package for Linux!"
-              fi
-              ;;
-          esac
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            echo "Packaging for macOS..."
+            if [[ -d "ImageAnnotation.app" ]]; then
+              ditto -c -k --sequesterRsrc --keepParent ImageAnnotation.app ImageAnnotation-macOS.zip
+            else
+              echo "⚠️ ImageAnnotation.app not found"
+            fi
+
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            echo "Packaging for Windows..."
+            if compgen -G "ImageAnnotation*.exe" > /dev/null; then
+              echo "Found EXE, zipping..."
+              powershell Compress-Archive -Path ImageAnnotation*.exe -DestinationPath ImageAnnotation-Windows.zip
+            elif [[ -d "ImageAnnotation" ]]; then
+              echo "Found folder, zipping..."
+              powershell Compress-Archive -Path ImageAnnotation -DestinationPath ImageAnnotation-Windows.zip
+            else
+              echo "⚠️ No .exe or folder found"
+            fi
+
+          elif [[ "$RUNNER_OS" == "Linux" ]]; then
+            echo "Packaging for Linux..."
+            if [[ -d "ImageAnnotation" ]]; then
+              tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation
+            elif compgen -G "ImageAnnotation*" > /dev/null; then
+              tar czf ImageAnnotation-Linux.tar.gz ImageAnnotation*
+            else
+              echo "⚠️ Nothing found to package"
+            fi
+          fi
         shell: bash
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os }}-Build
-          path: dist/*
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
 
       - name: Create Release (only on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/*
+          files: |
+            dist/*.zip
+            dist/*.tar.gz
