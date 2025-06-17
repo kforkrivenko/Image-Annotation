@@ -7,15 +7,11 @@ import tkinter as tk
 from collections import defaultdict
 from datetime import datetime
 from time import sleep
-import torch
-from ultralytics import YOLO
-
 from api.api import get_dataset, get_datasets_info
 from tkinter import ttk, filedialog, messagebox, simpledialog
 from pathlib import Path
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 import zipfile
-import json
 
 from data_processing.annotation_popover import AnnotationPopover, get_unique_folder_name
 from ml.yolo import ensure_model_downloaded, prepare_yolo_dataset
@@ -425,6 +421,7 @@ class ImageAnnotationApp:
         tk.Label(params_frame, text="Устройства:", font=("Arial", 12, "bold")).grid(row=6, column=0, sticky="e", padx=5, pady=5)
 
         def get_available_devices():
+            import torch
             # Проверяем доступность GPU, если доступно - добавляем в список
             devices = ["cpu"]  # Всегда доступен CPU
 
@@ -578,6 +575,8 @@ class ImageAnnotationApp:
 
     def _run_training(self, batch, epochs, imgsz, workers, model_name, device):
         """Выполняет обучение модели с безопасным обновлением UI"""
+        import torch
+        from ultralytics import YOLO
         try:
             if torch.backends.mps.is_available():
                 torch.mps.empty_cache()
@@ -653,6 +652,8 @@ class ImageAnnotationApp:
 
     def _run_testing(self, path_to_yaml, path_to_result, path_to_test_images, batch, imgsz, conf, iou, device):
         """Выполняет обучение модели с безопасным обновлением UI"""
+        import torch
+        from ultralytics import YOLO
         try:
             if torch.backends.mps.is_available():
                 torch.mps.empty_cache()
@@ -873,6 +874,7 @@ class ImageAnnotationApp:
                                                                                     pady=5)
 
         def get_available_devices():
+            import torch
             # Проверяем доступность GPU, если доступно - добавляем в список
             devices = ["cpu"]  # Всегда доступен CPU
 
@@ -1486,7 +1488,8 @@ class ImageAnnotationApp:
                         # Рисуем текст
                         x_center = (x1 + x2) / 2
                         y_center = (y1 + y2) / 2
-                        font = ImageFont.truetype("Arial", 14)
+                        font_path = get_resource_path('favicons/arial.ttf')
+                        font = ImageFont.truetype(font_path, 14)
                         text_bbox = draw.textbbox((x_center, y_center), label, font=font, anchor="mm")
                         draw.rectangle(
                             [text_bbox[0]-2, text_bbox[1]-2, text_bbox[2]+2, text_bbox[3]+2],
