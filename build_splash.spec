@@ -42,9 +42,10 @@ coll = COLLECT(
     upx_exclude=[],
     name='ImageAnnotation',
 )
-app = BUNDLE(
-    coll,
-    name='ImageAnnotation.app',
-    icon='favicons/favicon.icns' if platform.system() == "Darwin" else 'favicons/favicon.ico',
-    bundle_identifier=None,
-)
+if platform.system() == "Darwin":
+    app = BUNDLE(
+        coll,
+        name='ImageAnnotation.app',
+        icon='favicons/favicon.icns',
+        bundle_identifier=None,
+    )
