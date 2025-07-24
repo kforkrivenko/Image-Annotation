@@ -40,11 +40,11 @@ jobs:
           name: ImageAnnotation-macOS
           path: dist/final/ImageAnnotation-macOS.zip
 
-      - name: Create Release (only on tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: dist/final/ImageAnnotation-macOS.zip
+          name: ImageAnnotation-macOS
+          path: dist/final/ImageAnnotation-macOS.zip
 
   build-windows:
     runs-on: windows-latest
@@ -125,3 +125,4 @@ jobs:
         with:
           name: ImageAnnotation-linux
           path: dist/linux/ImageAnnotation-linux.zip
+
