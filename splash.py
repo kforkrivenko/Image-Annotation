@@ -4,16 +4,35 @@ import threading
 import time
 import os
 import sys
+import platform
 
 def launch_main():
-    # Определяем путь к основному приложению внутри Contents/Resources
+    system = platform.system()
     if getattr(sys, 'frozen', False):
         splash_app_dir = os.path.dirname(os.path.dirname(os.path.dirname(sys.executable)))
-        main_app_path = os.path.join(splash_app_dir, "Contents", "Resources", "ImageAnnotationMain.app")
+        if system == "Darwin":
+            # macOS: Contents/Resources/ImageAnnotationMain.app
+            main_app_path = os.path.join(splash_app_dir, "Contents", "Resources", "ImageAnnotationMain.app")
+            subprocess.Popen(["open", main_app_path])
+        elif system == "Windows":
+            # Windows: main exe рядом с splash (ImageAnnotationMain.exe)
+            main_app_path = os.path.join(splash_app_dir, "ImageAnnotationMain.exe")
+            subprocess.Popen([main_app_path], shell=True)
+        else:
+            # Linux: основной бинарник рядом (image_annotation_main)
+            main_app_path = os.path.join(splash_app_dir, "image_annotation_main")
+            subprocess.Popen([main_app_path])
     else:
-        main_app_path = os.path.abspath("../ImageAnnotationMain.app")
-
-    subprocess.Popen(["open", main_app_path])
+        # Для отладки из исходников
+        if system == "Darwin":
+            main_app_path = os.path.abspath("../ImageAnnotationMain.app")
+            subprocess.Popen(["open", main_app_path])
+        elif system == "Windows":
+            main_app_path = os.path.abspath("../ImageAnnotationMain.exe")
+            subprocess.Popen([main_app_path], shell=True)
+        else:
+            main_app_path = os.path.abspath("../image_annotation_main")
+            subprocess.Popen([main_app_path])
     time.sleep(2)
     root.quit()
 

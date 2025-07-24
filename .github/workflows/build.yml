@@ -1,4 +1,4 @@
-name: MacOS App Build
+name: Cross-Platform App Build
 
 on: [push, workflow_dispatch]
 
@@ -45,3 +45,83 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: dist/final/ImageAnnotation-macOS.zip
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13.2'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build application (with splash)
+        run: bash package_app.sh
+        shell: bash
+
+      - name: List windows app contents
+        run: |
+          echo "::group::dist/windows/"
+          ls -R dist/windows || true
+          echo "::endgroup::"
+        shell: bash
+
+      - name: Package windows app
+        run: |
+          cd dist/windows
+          zip ImageAnnotation-windows.zip ImageAnnotation.exe ImageAnnotationMain.exe
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImageAnnotation-windows
+          path: dist/windows/ImageAnnotation-windows.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13.2'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build application (with splash)
+        run: bash package_app.sh
+        shell: bash
+
+      - name: List linux app contents
+        run: |
+          echo "::group::dist/linux/"
+          ls -R dist/linux || true
+          echo "::endgroup::"
+        shell: bash
+
+      - name: Package linux app
+        run: |
+          cd dist/linux
+          zip ImageAnnotation-linux.zip image_annotation image_annotation_main
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImageAnnotation-linux
+          path: dist/linux/ImageAnnotation-linux.zip
