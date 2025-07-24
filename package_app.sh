@@ -15,8 +15,8 @@ if [[ "$UNAME" == "Darwin" ]]; then
     cp -R dist/ImageAnnotationMain.app dist/final/ImageAnnotation.app/Contents/Resources/ImageAnnotationMain.app
 elif [[ "$UNAME" == "Linux" ]]; then
     # Linux: splash и основной бинарник рядом
-    cp dist/ImageAnnotation dist/linux/ImageAnnotation
-    cp dist/ImageAnnotationMain dist/linux/ImageAnnotationMain
+    cp dist/ImageAnnotation/ImageAnnotation dist/linux/ImageAnnotation
+    cp dist/ImageAnnotationMain/ImageAnnotationMain dist/linux/ImageAnnotationMain
 elif [[ "$UNAME" == *NT* ]] || [[ "$UNAME" == *MINGW* ]] || [[ "$UNAME" == *MSYS* ]] || [[ "$UNAME" == *CYGWIN* ]]; then
     # Windows: splash.exe и основной exe рядом
     cp dist/ImageAnnotation/ImageAnnotation.exe dist/windows/ImageAnnotation.exe

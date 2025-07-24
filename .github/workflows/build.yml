@@ -77,7 +77,7 @@ jobs:
       - name: Package windows app
         run: |
           cd dist/windows
-          zip ImageAnnotation-windows.zip ImageAnnotation.exe ImageAnnotationMain.exe
+          powershell Compress-Archive -Path ImageAnnotation.exe,ImageAnnotationMain.exe -DestinationPath ImageAnnotation-windows.zip
         shell: bash
 
       - name: Upload artifact
@@ -117,7 +117,7 @@ jobs:
       - name: Package linux app
         run: |
           cd dist/linux
-          zip ImageAnnotation-linux.zip image_annotation image_annotation_main
+          zip ImageAnnotation-linux.zip ImageAnnotation ImageAnnotationMain
         shell: bash
 
       - name: Upload artifact
