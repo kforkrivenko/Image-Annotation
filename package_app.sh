@@ -19,6 +19,6 @@ elif [[ "$UNAME" == "Linux" ]]; then
     cp dist/ImageAnnotationMain dist/linux/ImageAnnotationMain
 elif [[ "$UNAME" == *NT* ]] || [[ "$UNAME" == *MINGW* ]] || [[ "$UNAME" == *MSYS* ]] || [[ "$UNAME" == *CYGWIN* ]]; then
     # Windows: splash.exe и основной exe рядом
-    cp dist/ImageAnnotation.exe dist/windows/ImageAnnotation.exe
-    cp dist/ImageAnnotationMain.exe dist/windows/ImageAnnotationMain.exe
+    cp dist/ImageAnnotation/ImageAnnotation.exe dist/windows/ImageAnnotation.exe
+    cp dist/ImageAnnotationMain/ImageAnnotationMain.exe dist/windows/ImageAnnotationMain.exe
 fi
