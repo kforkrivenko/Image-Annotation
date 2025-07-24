@@ -40,12 +40,6 @@ jobs:
           name: ImageAnnotation-macOS
           path: dist/final/ImageAnnotation-macOS.zip
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ImageAnnotation-macOS
-          path: dist/final/ImageAnnotation-macOS.zip
-
   build-windows:
     runs-on: windows-latest
     steps:
@@ -125,4 +119,37 @@ jobs:
         with:
           name: ImageAnnotation-linux
           path: dist/linux/ImageAnnotation-linux.zip
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: [build-macos, build-windows, build-linux]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ImageAnnotation-macOS
+          path: release
 
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ImageAnnotation-windows
+          path: release
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ImageAnnotation-linux
+          path: release
+
+      - name: List release files
+        run: ls -lh release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/ImageAnnotation-macOS.zip
+            release/ImageAnnotation-windows.zip
+            release/ImageAnnotation-linux.zip
