@@ -6,10 +6,10 @@ import os
 import sys
 
 def launch_main():
-    # Определяем путь к основному приложению внутри Resources
+    # Определяем путь к основному приложению внутри Contents/Resources
     if getattr(sys, 'frozen', False):
         splash_app_dir = os.path.dirname(os.path.dirname(os.path.dirname(sys.executable)))
-        main_app_path = os.path.join(splash_app_dir, "Resources", "ImageAnnotationMain.app")
+        main_app_path = os.path.join(splash_app_dir, "Contents", "Resources", "ImageAnnotationMain.app")
     else:
         main_app_path = os.path.abspath("../ImageAnnotationMain.app")
 
