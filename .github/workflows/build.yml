@@ -2,6 +2,9 @@ name: Cross-Platform App Build
 
 on: [push, workflow_dispatch]
 
+permissions:
+  contents: write
+
 jobs:
   build-macos:
     runs-on: macos-latest
