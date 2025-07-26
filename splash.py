@@ -9,19 +9,37 @@ import platform
 def launch_main():
     system = platform.system()
     if getattr(sys, 'frozen', False):
-        splash_app_dir = os.path.dirname(os.path.dirname(os.path.dirname(sys.executable)))
+        # Получаем директорию с исполняемым файлом
         if system == "Darwin":
             # macOS: Contents/Resources/ImageAnnotationMain.app
+            splash_app_dir = os.path.dirname(os.path.dirname(os.path.dirname(sys.executable)))
             main_app_path = os.path.join(splash_app_dir, "Contents", "Resources", "ImageAnnotationMain.app")
             subprocess.Popen(["open", main_app_path])
         elif system == "Windows":
-            # Windows: main exe рядом с splash (ImageAnnotationMain.exe)
-            main_app_path = os.path.join(splash_app_dir, "ImageAnnotationMain.exe")
-            subprocess.Popen([main_app_path], shell=True)
+            # Windows: main exe в папке ImageAnnotationMain
+            splash_dir = os.path.dirname(sys.executable)
+            main_app_path = os.path.join(splash_dir, "ImageAnnotationMain", "ImageAnnotationMain.exe")
+            # Проверяем существование файла
+            if os.path.exists(main_app_path):
+                subprocess.Popen([main_app_path])
+            else:
+                # Fallback: ищем в той же папке что и splash
+                main_app_path = os.path.join(splash_dir, "ImageAnnotationMain.exe")
+                if os.path.exists(main_app_path):
+                    subprocess.Popen([main_app_path])
+                else:
+                    print(f"Не найден ImageAnnotationMain.exe в {splash_dir}")
         else:
-            # Linux: основной бинарник рядом (image_annotation_main)
-            main_app_path = os.path.join(splash_app_dir, "image_annotation_main")
-            subprocess.Popen([main_app_path])
+            # Linux: основной бинарник рядом
+            splash_dir = os.path.dirname(sys.executable)
+            main_app_path = os.path.join(splash_dir, "ImageAnnotationMain")
+            if os.path.exists(main_app_path):
+                subprocess.Popen([main_app_path])
+            else:
+                # Fallback: ищем в папке ImageAnnotationMain
+                main_app_path = os.path.join(splash_dir, "ImageAnnotationMain", "ImageAnnotationMain")
+                if os.path.exists(main_app_path):
+                    subprocess.Popen([main_app_path])
     else:
         # Для отладки из исходников
         if system == "Darwin":
@@ -29,9 +47,9 @@ def launch_main():
             subprocess.Popen(["open", main_app_path])
         elif system == "Windows":
             main_app_path = os.path.abspath("../ImageAnnotationMain.exe")
-            subprocess.Popen([main_app_path], shell=True)
+            subprocess.Popen([main_app_path])
         else:
-            main_app_path = os.path.abspath("../image_annotation_main")
+            main_app_path = os.path.abspath("../ImageAnnotationMain")
             subprocess.Popen([main_app_path])
     time.sleep(2)
     root.quit()
