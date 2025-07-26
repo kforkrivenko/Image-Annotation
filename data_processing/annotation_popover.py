@@ -172,14 +172,14 @@ class AnnotationPopover(tk.Toplevel):
                 self.json_manager[hash_name] = str(folder_path)
 
                 if is_zip:
-                    json_files = list(Path(output_dir).glob("*.json"))
+                    json_files = list(folder_path.glob("*.json"))
                     if json_files:
                         annotations_path = json_files[0]  # ← путь к первому JSON-файлу
                     else:
                         raise FileNotFoundError("JSON файл не найден в распакованной папке.")
 
-                    annotations_manager = JsonManager(output_dir / annotations_path)
-                    annotations_file = Path(folder_path) / 'annotations.json'
+                    annotations_manager = JsonManager(output_dir / 'annotations.json')
+                    annotations_file = Path(folder_path) / annotations_path
                     with open(annotations_file, 'r', encoding='utf-8') as f:
                         new_annotations = json.load(f)
                     # new_annotations: {image_name: [anns]}
