@@ -119,13 +119,21 @@ class ImageAnnotationApp:
         )
         self.annotate_btn.pack(side=tk.LEFT, padx=20, ipadx=20, ipady=10)
 
-        self.annotate_btn_googledrive = tk.Button(
+        # self.annotate_btn_googledrive = tk.Button(
+        #     button_frame,
+        #     text="Загрузить папку для разметки из Google Drive",
+        #     command=self._show_gdrive_folder_selector,
+        #     bg="#e1e1e1"
+        # )
+        # self.annotate_btn_googledrive.pack(side=tk.LEFT, padx=20, ipadx=20, ipady=10)
+
+        self.annotate_btn_zip = tk.Button(
             button_frame,
-            text="Загрузить папку для разметки из Google Drive",
-            command=self._show_gdrive_folder_selector,
+            text="Загрузить размеченный датасет .zip",
+            command= lambda: self._show_popover(is_zip=True),
             bg="#e1e1e1"
         )
-        self.annotate_btn_googledrive.pack(side=tk.LEFT, padx=20, ipadx=20, ipady=10)
+        self.annotate_btn_zip.pack(side=tk.LEFT, padx=20, ipadx=20, ipady=10)
 
         # Настройка стилей
         style = ttk.Style()
@@ -669,6 +677,18 @@ class ImageAnnotationApp:
                 self._safe_update_test_status("Тестирование прервано", warning=True)
                 return
 
+            # Создаем отдельные папки для val и predict
+            val_result_path = str(Path(path_to_result) / "val")
+            predict_result_path = str(Path(path_to_result) / "predict")
+            
+            # Создаем папки если их нет
+            os.makedirs(val_result_path, exist_ok=True)
+            os.makedirs(predict_result_path, exist_ok=True)
+            
+            print(f"DEBUG: val_result_path = {val_result_path}")
+            print(f"DEBUG: predict_result_path = {predict_result_path}")
+            print(f"DEBUG: path_to_test_images = {path_to_test_images}")
+
             results = model.val(
                 data=path_to_yaml,  # путь к data.yaml
                 split='test',  # использование тестового набора (должен быть указан в data.yaml)
@@ -677,20 +697,35 @@ class ImageAnnotationApp:
                 conf=conf,  # порог уверенности для детекции
                 iou=iou,  # порог IoU для NMS
                 device=device,  # GPU (если доступен)
-                project=path_to_result
+                project=val_result_path
             )
 
             # Перезагружаем модель
             model = YOLO(DATA_DIR / 'models' / model_variant)
+            print(f"DEBUG: Запуск predict с параметрами:")
+            print(f"  source={path_to_test_images}")
+            print(f"  project={predict_result_path}")
+            print(f"  conf=0.5")
+            
             model.predict(
                 source=path_to_test_images,
                 save=True,
                 conf=0.5,
-                project=path_to_result
+                project=predict_result_path,
+                name=".",
+                exist_ok=True
             )
+            
+            print(f"DEBUG: predict завершен")
+            print(f"DEBUG: Проверяем содержимое {predict_result_path}:")
+            if os.path.exists(predict_result_path):
+                for item in os.listdir(predict_result_path):
+                    print(f"  - {item}")
+            else:
+                print(f"  Папка {predict_result_path} не существует!")
 
             if not getattr(self, 'testing_cancelled', False):
-                self._safe_update_test_status("Обучение завершено!", success=True)
+                self._safe_update_test_status("Тестирование завершено!", success=True)
 
         except Exception as e:
             self._safe_update_test_status(f"Ошибка: {str(e)}", error=True)
@@ -1030,7 +1065,13 @@ class ImageAnnotationApp:
         for i, sub_folder in enumerate(sub_folders):
             print("DEBUG", sub_folder.name)
             real_name = Path(json_manager[sub_folder.name]).name
-            images_folder = Path(sub_folder) / "result" / "predict"
+            # Ищем результаты предсказаний в новой структуре папок
+            predict_folder = Path(sub_folder) / "predict"
+            if not predict_folder.exists():
+                # Fallback к старой структуре
+                images_folder = Path(sub_folder) / "result" / "predict"
+            else:
+                images_folder = predict_folder
 
             # Фрейм для одного датасета
             item_frame = tk.Frame(
@@ -1400,16 +1441,18 @@ class ImageAnnotationApp:
             blazons = None
 
         # Спрашиваем пользователя о формате скачивания
-        format_choice = messagebox.askyesno(
+        format_choice = messagebox.askyesnocancel(
             "Выбор формата",
             "Выберите формат скачивания:\n\n"
-            "Да - скачать аннотированные изображения (разметка будет на картинках)\n"
-            "Нет - скачать оригинальные изображения + JSON файлы",
+            "Yes - скачать аннотированные изображения (разметка будет на картинках)\n"
+            "No - скачать оригинальные изображения + JSON файлы\n"
+            "Cancel — отменить операцию",
             parent=self.root
         )
 
         # Показываем индикатор загрузки
-        self._show_loading_indicator()
+        if format_choice is not None:
+            self._show_loading_indicator()
 
         def download_complete_callback(success):
             """Коллбек для закрытия окна загрузки"""
@@ -1418,7 +1461,10 @@ class ImageAnnotationApp:
                 messagebox.showinfo("Готово", f"Датасет '{real_name}' успешно скачан в папку Downloads!",
                                     parent=self.root)
 
-        if format_choice:
+        print("format_choice: ", format_choice)
+        if format_choice is None:
+            return
+        elif format_choice == True:
             # Скачиваем аннотированные изображения
             threading.Thread(
                 target=lambda: self._download_annotated_images(
@@ -1429,7 +1475,7 @@ class ImageAnnotationApp:
                 ),
                 daemon=True
             ).start()
-        else:
+        elif format_choice == False:
             # Скачиваем оригинальные изображения + JSON
             extra_data = [
                 (annotations, 'annotations.json'),
@@ -1445,6 +1491,7 @@ class ImageAnnotationApp:
                 ),
                 daemon=True
             ).start()
+            
 
     def _download_annotated_images(self, dataset_folder, real_name, annotations, callback):
         """Скачивает датасет с аннотированными изображениями"""
@@ -1492,8 +1539,11 @@ class ImageAnnotationApp:
                         # Рисуем текст
                         x_center = (x1 + x2) / 2
                         y_center = (y1 + y2) / 2
-                        font_path = get_resource_path('favicons/arial.ttf')
-                        font = ImageFont.truetype(font_path, 14)
+                        try:
+                            font_path = get_resource_path('favicons/arial.ttf')
+                            font = ImageFont.truetype(font_path, 14)
+                        except OSError:
+                            font = ImageFont.load_default()
                         text_bbox = draw.textbbox((x_center, y_center), label, font=font, anchor="mm")
                         draw.rectangle(
                             [text_bbox[0]-2, text_bbox[1]-2, text_bbox[2]+2, text_bbox[3]+2],
@@ -1742,7 +1792,7 @@ class ImageAnnotationApp:
             e.show_tkinter_error()
             popover.destroy()
 
-    def _show_popover(self):
+    def _show_popover(self, is_zip=False):
         """Показывает Popover с интерфейсом разметки"""
         popover = AnnotationPopover(self.root, self)
 
@@ -1753,45 +1803,10 @@ class ImageAnnotationApp:
 
         # Пытаемся загрузить папку с картинками
         try:
-            popover.load_folder()
+            popover.load_folder(is_zip=is_zip)
         except NoImagesError as e:
             e.show_tkinter_error()
             popover.destroy()
-
-    def _import_annotated_zip(self, zip_path):
-        """Импортирует размеченный датасет из zip-архива"""
-        import json
-        temp_dir = Path(tempfile.mkdtemp())
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
-        # Ищем изображения и annotations.json
-        images = [f for f in temp_dir.iterdir() if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']]
-        annotations_file = temp_dir / 'annotations.json'
-        if not images or not annotations_file.exists():
-            messagebox.showerror("Ошибка", "В архиве должны быть картинки и файл annotations.json")
-            shutil.rmtree(temp_dir)
-            return
-        # Копируем изображения в новую папку
-        output_dir = DATA_DIR / 'annotated_dataset'
-        hash_name = get_unique_folder_name(temp_dir)
-        dst_path = output_dir / hash_name
-        shutil.copytree(temp_dir, dst_path, dirs_exist_ok=True)
-        # Объединяем аннотации
-        annotations_manager = JsonManager(output_dir / 'annotations.json')
-        with open(annotations_file, 'r', encoding='utf-8') as f:
-            new_annotations = json.load(f)
-        # new_annotations: {image_name: [anns]}
-        for image_name, anns in new_annotations.items():
-            annotations_manager.data.setdefault(str(dst_path), {}).setdefault(image_name, []).extend(anns)
-        annotations_manager.save()
-        # Добавляем в hash_to_name.json
-        hash_to_name_manager = JsonManager(output_dir / 'hash_to_name.json')
-        hash_to_name_manager[hash_name] = str(temp_dir)
-        hash_to_name_manager.save()
-        # Обновляем список датасетов
-        self.get_annotated_datasets()
-        messagebox.showinfo("Готово", "Размеченный датасет успешно импортирован!", parent=self.root)
-        shutil.rmtree(temp_dir)
 
     def _show_gdrive_folder_selector(self):
         """Всплывающее окно с множественным выбором папок"""

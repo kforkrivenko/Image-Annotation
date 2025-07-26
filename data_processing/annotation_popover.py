@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 from utils.json_manager import JsonManager, AnnotationFileManager
 from utils.paths import DATA_DIR
+import tempfile
+import zipfile
 
 
 def get_unique_folder_name(source_path: Path) -> str:
@@ -150,8 +152,9 @@ class AnnotationPopover(tk.Toplevel):
             # Если введено не число
             self.status_var.set("Введите валидный номер изображения!")
 
-    def _copy_to_folder_and_rename(self, folder_path):
+    def _copy_to_folder_and_rename(self, folder_path, is_zip=False):
         """Копируем в защищенную папку, переименовываем с помощью хэша"""
+        import json
         folder_path = Path(folder_path)
 
         if folder_path.exists():
@@ -167,42 +170,92 @@ class AnnotationPopover(tk.Toplevel):
                 shutil.copytree(folder_path, dst_path)
                 self.folder_path = dst_path
                 self.json_manager[hash_name] = str(folder_path)
+
+                if is_zip:
+                    annotations_manager = JsonManager(output_dir / 'annotations.json')
+                    annotations_file = Path(folder_path) / 'annotations.json'
+                    with open(annotations_file, 'r', encoding='utf-8') as f:
+                        new_annotations = json.load(f)
+                    # new_annotations: {image_name: [anns]}
+                    for image_name, anns in new_annotations.items():
+                        annotations_manager.data.setdefault(str(dst_path), {}).setdefault(image_name, []).extend(anns)
+                    annotations_manager.save()
+
             else:
                 self.folder_path = dst_path
 
-    def load_folder(self, path=None):
+    def load_folder(self, path=None, is_zip=False):
         if path:
             folder_path = Path(path)
             self.folder_path = path
-        else:
-            folder_path = filedialog.askdirectory(title="Выберите папку с изображениями")
-        if folder_path:
+
             images = [
                 f for f in os.listdir(folder_path)
                 if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))
             ]
+
             if not images:
+                self.destroy()
                 raise NoImagesError()
+        else:
+            if is_zip == False:
+                folder_path = filedialog.askdirectory(title="Выберите папку с изображениями")
+
+                if not folder_path:
+                    self.destroy()
+                    return
+
+                images = [
+                    f for f in os.listdir(folder_path)
+                    if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))
+                ]
+
+                if not images:
+                    self.destroy()
+                    raise NoImagesError()
+            else:
+                zip_path = filedialog.askopenfilename(
+                    title="Выберите архив с изображениями",
+                    filetypes=(("Архивы", "*.zip"),)
+                )
+
+                if not zip_path:
+                    self.destroy()
+                    return
+
+                # Шаг 2: Распаковка во временную папку
+                temp_dir = tempfile.mkdtemp()  # создаёт временную директорию
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
+
+                folder_path = temp_dir
+
+                images = [
+                    f for f in os.listdir(temp_dir)
+                    if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))
+                ]
+
+                if not images:
+                    self.destroy()
+                    raise NoImagesError()
             
             print("images: ", images)
 
-            if not path:
-                self._copy_to_folder_and_rename(folder_path)
-            self.image_loader = ImageLoader(
-                self.folder_path,
-                annotated_path=self.annotated_path
-            )
+        if not path:
+            self._copy_to_folder_and_rename(folder_path, is_zip=is_zip)
+        self.image_loader = ImageLoader(
+            self.folder_path,
+            annotated_path=self.annotated_path
+        )
 
-            self.canvas.image_loader = self.image_loader
+        self.canvas.image_loader = self.image_loader
 
-            self.annotation_saver = AnnotationSaver(
-                self.folder_path,
-                annotated_path=self.annotated_path
-            )
-            self.canvas.annotation_saver = self.annotation_saver
-            self._load_image()
-        else:
-            self.destroy()
+        self.annotation_saver = AnnotationSaver(
+            self.folder_path,
+            annotated_path=self.annotated_path
+        )
+        self.canvas.annotation_saver = self.annotation_saver
+        self._load_image()
 
     @log_method
     def _load_image(self, direction="next"):
