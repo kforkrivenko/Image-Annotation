@@ -172,7 +172,13 @@ class AnnotationPopover(tk.Toplevel):
                 self.json_manager[hash_name] = str(folder_path)
 
                 if is_zip:
-                    annotations_manager = JsonManager(output_dir / 'annotations.json')
+                    json_files = list(Path(output_dir).glob("*.json"))
+                    if json_files:
+                        annotations_path = json_files[0]  # ← путь к первому JSON-файлу
+                    else:
+                        raise FileNotFoundError("JSON файл не найден в распакованной папке.")
+
+                    annotations_manager = JsonManager(output_dir / annotations_path)
                     annotations_file = Path(folder_path) / 'annotations.json'
                     with open(annotations_file, 'r', encoding='utf-8') as f:
                         new_annotations = json.load(f)
@@ -180,6 +186,8 @@ class AnnotationPopover(tk.Toplevel):
                     for image_name, anns in new_annotations.items():
                         annotations_manager.data.setdefault(str(dst_path), {}).setdefault(image_name, []).extend(anns)
                     annotations_manager.save()
+
+                    print(annotations_manager.data)
 
             else:
                 self.folder_path = dst_path
@@ -226,6 +234,7 @@ class AnnotationPopover(tk.Toplevel):
                 # Шаг 2: Распаковка во временную папку
                 temp_dir = tempfile.mkdtemp()  # создаёт временную директорию
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    print(zip_ref.namelist())
                     zip_ref.extractall(temp_dir)
 
                 folder_path = temp_dir
@@ -242,7 +251,12 @@ class AnnotationPopover(tk.Toplevel):
             print("images: ", images)
 
         if not path:
-            self._copy_to_folder_and_rename(folder_path, is_zip=is_zip)
+            try:
+                self._copy_to_folder_and_rename(folder_path, is_zip=is_zip)
+            except FileNotFoundError as e:
+                self.destroy()
+                messagebox.showerror("Ошибка", f"Нет .json файл с разметкой в архиве:\n\n{e}")
+
         self.image_loader = ImageLoader(
             self.folder_path,
             annotated_path=self.annotated_path
