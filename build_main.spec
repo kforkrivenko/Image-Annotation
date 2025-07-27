@@ -16,12 +16,9 @@ a = Analysis(
     optimize=0,
 )
 
-# Создание .pyz архива
 pyz = PYZ(a.pure)
 
-# Платформозависимая сборка
 if platform.system() == "Darwin":
-    # macOS: оставляем как есть
     exe = EXE(
         pyz,
         a.scripts,
@@ -58,12 +55,11 @@ if platform.system() == "Darwin":
     )
 
 else:
-    # Windows и Linux: включаем бинарники в .exe
     exe = EXE(
         pyz,
         a.scripts,
-        a.binaries,  # <--- Важно
-        exclude_binaries=False,  # <--- Включаем бинарники в exe
+        a.binaries,
+        exclude_binaries=False,
         name='ImageAnnotationMain',
         debug=False,
         bootloader_ignore_signals=False,
@@ -75,14 +71,5 @@ else:
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
-    )
-
-    coll = COLLECT(
-        exe,
-        a.binaries,
-        a.datas,
-        strip=False,
-        upx=True,
-        upx_exclude=[],
-        name='ImageAnnotationMain',
+        onefile=True,
     )
