@@ -35,7 +35,7 @@ jobs:
       - name: Package macos .app
         run: |
           cd dist/macos
-          ditto -c -k --sequesterRsrc --keepParent ImageAnnotation.app ImageAnnotation-macOS.zip
+          ditto -c -k --sequesterRsrc --keepParent ImageAnnotationMain.app ImageAnnotation-macOS.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
