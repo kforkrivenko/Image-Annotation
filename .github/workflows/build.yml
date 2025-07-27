@@ -26,22 +26,22 @@ jobs:
       - name: Build application (with splash)
         run: bash package_app.sh
 
-      - name: List final app contents
+      - name: List macos app contents
         run: |
-          echo "::group::dist/final/"
-          ls -R dist/final || true
+          echo "::group::dist/macos/"
+          ls -R dist/macos || true
           echo "::endgroup::"
 
-      - name: Package final .app
+      - name: Package macos .app
         run: |
-          cd dist/final
+          cd dist/macos
           ditto -c -k --sequesterRsrc --keepParent ImageAnnotation.app ImageAnnotation-macOS.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ImageAnnotation-macOS
-          path: dist/final/ImageAnnotation-macOS.zip
+          path: dist/macos/ImageAnnotation-macOS.zip
 
   build-windows:
     runs-on: windows-latest

@@ -74,7 +74,7 @@ exe = EXE(
     pyz,
     a.scripts,
     [],
-    exclude_binaries=True,
+    exclude_binaries=False,
     name='ImageAnnotationMain',
     debug=False,
     bootloader_ignore_signals=False,
@@ -86,6 +86,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    onefile=True,
 )
 coll = COLLECT(
     exe,
