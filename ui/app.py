@@ -235,15 +235,45 @@ class ImageAnnotationApp:
         ).pack(anchor="w")
 
         self.available_models = self._get_available_models()
-        self.model_var = tk.StringVar(value=(self.available_models[0] if self.available_models else ""))
+        self.model_var = tk.StringVar()
 
-        self.model_selector = ttk.Combobox(
+        self.model_listbox = tk.Listbox(
             self.model_frame,
-            textvariable=self.model_var,
-            values=self.available_models,
-            state="readonly" if self.available_models else "disabled"
+            height=8,
+            exportselection=False
         )
-        self.model_selector.pack(fill=tk.X, pady=5)
+        self.model_listbox.pack(fill=tk.X, pady=5)
+
+        # Заполняем список моделей
+        for model in self.available_models:
+            self.model_listbox.insert(tk.END, model)
+
+        # Устанавливаем выбранную модель, если есть
+        if self.available_models:
+            self.model_listbox.selection_set(0)
+            self.model_var.set(self.available_models[0])
+
+        # Привязка выбора модели
+        def on_model_select(event):
+            selection = self.model_listbox.curselection()
+            if selection:
+                selected_model = self.model_listbox.get(selection[0])
+                self.model_var.set(selected_model)
+
+        self.model_listbox.bind("<<ListboxSelect>>", on_model_select)
+
+        self.rename_button = ttk.Button(
+            self.model_frame,
+            text="Переименовать",
+            command=self._rename_model
+        )
+        self.rename_button.pack(pady=5)
+
+        # Если моделей нет — отключаем список и кнопку
+        if not self.available_models:
+            self.model_listbox.configure(state="disabled")
+            self.rename_button.configure(state="disabled")
+
 
         # Блок кнопок скачивания
         download_frame = tk.Frame(self.model_frame, bg="white")
@@ -340,6 +370,31 @@ class ImageAnnotationApp:
         # Инициализация списка протестированных датасетов
         self._setup_tested_datasets_panel()
 
+    def _rename_model(self):
+        selection = self.model_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("Нет выбора", "Выберите модель для переименования.")
+            return
+
+        old_name = self.model_listbox.get(selection[0])
+        new_name = simpledialog.askstring("Переименование", f"Новое имя для модели '{old_name}':", initialvalue=old_name)
+
+        if new_name:
+            models_dir = DATA_DIR / "models"
+            old_path = os.path.join(models_dir, old_name)
+            new_path = os.path.join(models_dir, new_name)
+            if os.path.exists(new_path):
+                messagebox.showerror("Ошибка", f"Модель с именем '{new_name}' уже существует.")
+                return
+            try:
+                os.rename(old_path, new_path)
+                self.available_models = self._get_available_models()
+                self.model_listbox.delete(0, tk.END)
+                for model in self.available_models:
+                    self.model_listbox.insert(tk.END, model)
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось переименовать модель:\n{e}")
+
     def _refresh_ui(self):
         """Полностью обновляет интерфейс приложения"""
         # Удаляем все виджеты из главного окна
@@ -356,7 +411,7 @@ class ImageAnnotationApp:
         if not models_dir.exists():
             return []
 
-        models = list([f.name for f in models_dir.glob("*.pt")])
+        models = sorted(list([f.name for f in models_dir.glob("*.pt")]))
         # models_trained = list([f.parent.parent.name + "/" + f.name for f in Path(DATA_DIR).glob("**/best.pt")])
         return models  # + models_trained
 
