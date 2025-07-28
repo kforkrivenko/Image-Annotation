@@ -105,7 +105,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     name='ImageAnnotationMain',
-    debug=False,
+    debug=True,
     strip=True,                   # Убираем дебажные символы (меньше размер)
     upx=True,
     console=False,                 # Без консоли (GUI)
