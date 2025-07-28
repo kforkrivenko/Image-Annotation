@@ -407,20 +407,16 @@ class ImageAnnotationApp:
                 messagebox.showerror("Ошибка", f"Не удалось переименовать модель:\n{e}")
 
     def _refresh_ui(self):
-        """Полностью обновляет интерфейс приложения"""
+        """Обновляет интерфейс приложения"""
         # Проверяем, не происходит ли уже обновление
         if hasattr(self, '_refreshing'):
             return
         self._refreshing = True
         
         try:
-            # Удаляем все виджеты из главного окна
-            for widget in self.root.winfo_children():
-                widget.destroy()
-
-            # Пересоздаем интерфейс
-            self._setup_ui()
-            self._setup_tested_datasets_panel()
+            # Обновляем списки датасетов
+            self.get_annotated_datasets()
+            self.get_tested_datasets()
         finally:
             self._refreshing = False
 
@@ -441,7 +437,14 @@ class ImageAnnotationApp:
         #  model = YOLO(model_path)
 
         messagebox.showinfo("Модель загружена", f"Модель {model_name} успешно скачана.")
-        self._refresh_ui()
+        # Обновляем список моделей
+        self.available_models = self._get_available_models()
+        self.model_listbox.delete(0, tk.END)
+        for model in self.available_models:
+            self.model_listbox.insert(tk.END, model)
+        if self.available_models:
+            self.model_listbox.selection_set(0)
+            self.model_var.set(self.available_models[0])
 
     def _download_user_model(self):
         """Cкачивания модели."""
@@ -462,7 +465,14 @@ class ImageAnnotationApp:
         try:
             shutil.copy2(Path(filepath), dest_path)
             messagebox.showinfo("Модель загружена", f"Модель {Path(filepath).name} успешно скачана.")
-            self._refresh_ui()
+            # Обновляем список моделей
+            self.available_models = self._get_available_models()
+            self.model_listbox.delete(0, tk.END)
+            for model in self.available_models:
+                self.model_listbox.insert(tk.END, model)
+            if self.available_models:
+                self.model_listbox.selection_set(0)
+                self.model_var.set(self.available_models[0])
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка при загрузке файла: {str(e)}")
 
@@ -1333,7 +1343,9 @@ class ImageAnnotationApp:
                     if not getattr(self, 'training_cancelled', False):
                         messagebox.showinfo("Готово", "Обучение модели завершено!", parent=self.train_window)
                     self.train_window.destroy()
-                    self._refresh_ui()
+                    # Обновляем списки датасетов
+                    self.get_annotated_datasets()
+                    self.get_tested_datasets()
             finally:
                 self._finalizing_training = False
                 # Сбрасываем флаг запуска обучения
@@ -1358,7 +1370,9 @@ class ImageAnnotationApp:
                     if not getattr(self, 'testing_cancelled', False):
                         messagebox.showinfo("Готово", "Тестирование модели завершено!", parent=self.test_window)
                     self.test_window.destroy()
-                    self._refresh_ui()
+                    # Обновляем списки датасетов
+                    self.get_annotated_datasets()
+                    self.get_tested_datasets()
             finally:
                 self._finalizing_testing = False
                 # Сбрасываем флаг запуска тестирования

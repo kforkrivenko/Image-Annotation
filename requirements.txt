@@ -5,6 +5,7 @@ opencv_python_headless==4.10.0.84
 pandas==2.2.3
 Pillow==11.2.1
 protobuf==6.30.2
+psutil==6.1.0
 PyYAML==6.0.2
 scikit_learn==1.6.1
 torch==2.6.0

@@ -4,12 +4,49 @@ import os
 
 # --- Кроссплатформенный lock-файл для защиты от двойного запуска (особенно в PyInstaller .app) ---
 import tempfile
+
+# Пытаемся импортировать psutil, если не доступен - используем простую проверку
+try:
+    import psutil
+    def pid_exists(pid):
+        return psutil.pid_exists(pid)
+except ImportError:
+    def pid_exists(pid):
+        try:
+            os.kill(pid, 0)  # Проверяем, существует ли процесс
+            return True
+        except OSError:
+            return False
+
 lockfile = os.path.join(tempfile.gettempdir(), 'nn_custom_train_tool.lock')
+
+# Проверяем, существует ли lock-файл и работает ли процесс
 if os.path.exists(lockfile):
-    print("[LOCK] Already running, exiting.")
-    sys.exit(0)
+    try:
+        with open(lockfile, 'r') as f:
+            pid_str = f.read().strip()
+            if pid_str.isdigit():
+                pid = int(pid_str)
+                # Проверяем, существует ли процесс с этим PID
+                if pid_exists(pid):
+                    print("[LOCK] Already running, exiting.")
+                    sys.exit(0)
+                else:
+                    # Процесс не существует, удаляем старый lock-файл
+                    print("[LOCK] Stale lock file found, removing...")
+                    os.remove(lockfile)
+    except (ValueError, IOError):
+        # Если не удается прочитать PID, удаляем файл
+        print("[LOCK] Corrupted lock file found, removing...")
+        try:
+            os.remove(lockfile)
+        except:
+            pass
+
+# Создаем новый lock-файл
 with open(lockfile, 'w') as f:
     f.write(str(os.getpid()))
+
 import atexit
 def _remove_lock():
     try:
