@@ -1,8 +1,5 @@
-from utils.paths import *
-from ui.app import ImageAnnotationApp
-from pathlib import Path
 import sys
-import os
+from pathlib import Path
 
 # === 💡 Проверка тестового режима до GUI
 if '--test' in sys.argv:
@@ -14,6 +11,8 @@ if '--test' in sys.argv:
 
 import threading
 import tkinter as tk
+from utils.paths import *
+from ui.app import ImageAnnotationApp
 from tkinter import Label
 
 # Создание необходимых директорий
