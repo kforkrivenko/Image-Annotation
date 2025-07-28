@@ -136,7 +136,7 @@ jobs:
           Expand-Archive -Path ./dist/windows/ImageAnnotation-windows.zip -DestinationPath ./unzipped_windows
       - name: Smoke test exe
         run:
-          .\unzipped_windows\ImageAnnotationMain.exe || exit /b 1
+          .\unzipped_windows\ImageAnnotationMain.exe --test || exit /b 1
   release:
     name: Publish Release
     runs-on: ubuntu-latest
