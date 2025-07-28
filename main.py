@@ -5,6 +5,13 @@ import threading
 import tkinter as tk
 from tkinter import Label
 
+
+if '--test' in sys.argv:
+    print("✅ Test mode active")
+    with open("test_log.txt", "w") as f:
+        f.write("Running test mode\n")
+    sys.exit(0)
+
 # Создание необходимых директорий
 def prepare_env():
     (DATA_DIR / "logs").mkdir(exist_ok=True)

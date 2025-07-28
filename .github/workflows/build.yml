@@ -137,7 +137,12 @@ jobs:
       - name: Smoke test exe
         shell: cmd
         run:
+          echo Running test executable...
           .\unzipped_windows\ImageAnnotationMain.exe --test || exit /b 1
+          echo Test completed
+      - name: Show test log
+        run: type ./unzipped_windows/test_log.txt
+        shell: cmd
   release:
     name: Publish Release
     runs-on: ubuntu-latest
