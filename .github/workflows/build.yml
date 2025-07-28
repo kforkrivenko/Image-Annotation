@@ -155,7 +155,7 @@ jobs:
       - name: Download artefact
         uses: actions/download-artifact@v4
         with:
-          name: IImageAnnotation-macOS
+          name: ImageAnnotation-macOS
           path: ./dist/macos
 
       - name: Unzip artefact
