@@ -198,12 +198,6 @@ jobs:
           name: ImageAnnotation-windows
           path: release
 
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ImageAnnotation-linux
-          path: release
-
       - name: List release files
         run: ls -lh release
 
