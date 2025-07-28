@@ -20,6 +20,15 @@ from utils.json_manager import JsonManager, AnnotationFileManager
 from utils.paths import DATA_DIR
 from utils.errors import FolderLoadError, NoImagesError
 
+# Импорты для ML компонентов (загружаются при инициализации приложения)
+try:
+    import torch
+    from ultralytics import YOLO
+except ImportError:
+    # Если библиотеки не установлены, они будут импортированы позже
+    torch = None
+    YOLO = None
+
 
 class TextRedirector:
     """Безопасное перенаправление вывода в текстовый виджет"""
@@ -438,15 +447,14 @@ class ImageAnnotationApp:
         tk.Label(params_frame, text="Устройства:", font=("Arial", 12, "bold")).grid(row=6, column=0, sticky="e", padx=5, pady=5)
 
         def get_available_devices():
-            import torch
             # Проверяем доступность GPU, если доступно - добавляем в список
             devices = ["cpu"]  # Всегда доступен CPU
 
-            if torch.cuda.is_available():
+            if torch is not None and torch.cuda.is_available():
                 # Если доступен GPU, добавляем его в список
                 devices.append(f"cuda")
 
-            if torch.backends.mps.is_available():
+            if torch is not None and torch.backends.mps.is_available():
                 # Если доступен MPS, добавляем его в список
                 devices.append(f"mps")
 
@@ -592,8 +600,11 @@ class ImageAnnotationApp:
 
     def _run_training(self, batch, epochs, imgsz, workers, model_name, device):
         """Выполняет обучение модели с безопасным обновлением UI"""
-        import torch
-        from ultralytics import YOLO
+        # Проверяем, что библиотеки загружены
+        if torch is None or YOLO is None:
+            self._safe_update_train_status("Ошибка: ML библиотеки не загружены", error=True)
+            return
+            
         try:
             if torch.backends.mps.is_available():
                 torch.mps.empty_cache()
@@ -669,8 +680,11 @@ class ImageAnnotationApp:
 
     def _run_testing(self, path_to_yaml, path_to_result, path_to_test_images, batch, imgsz, conf, iou, device):
         """Выполняет обучение модели с безопасным обновлением UI"""
-        import torch
-        from ultralytics import YOLO
+        # Проверяем, что библиотеки загружены
+        if torch is None or YOLO is None:
+            self._safe_update_test_status("Ошибка: ML библиотеки не загружены", error=True)
+            return
+            
         try:
             if torch.backends.mps.is_available():
                 torch.mps.empty_cache()
@@ -919,15 +933,14 @@ class ImageAnnotationApp:
                                                                                     pady=5)
 
         def get_available_devices():
-            import torch
             # Проверяем доступность GPU, если доступно - добавляем в список
             devices = ["cpu"]  # Всегда доступен CPU
 
-            if torch.cuda.is_available():
+            if torch is not None and torch.cuda.is_available():
                 # Если доступен GPU, добавляем его в список
                 devices.append(f"cuda")
 
-            if torch.backends.mps.is_available():
+            if torch is not None and torch.backends.mps.is_available():
                 # Если доступен MPS, добавляем его в список
                 devices.append(f"mps")
 
