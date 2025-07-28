@@ -49,7 +49,7 @@ def run_app():
                 splash.after(0, callback)
             except Exception as e:
                 print(f"[ERROR] Heavy init failed: {e}")
-                with open("test_log.txt", "a") as f:
+                with open(test_log_path, "a") as f:
                     f.write(f"[ERROR] Heavy init failed: {e}\n")
                 splash.after(0, splash.destroy)
 
