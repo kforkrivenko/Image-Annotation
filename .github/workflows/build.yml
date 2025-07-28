@@ -140,8 +140,14 @@ jobs:
           echo Running test executable...
           .\unzipped_windows\ImageAnnotationMain.exe --test || exit /b 1
           echo Test completed
-      - name: Show test log
-        run: type ./unzipped_windows/test_log.txt
+      - name: Check test log output
+        run: |
+          if exist unzipped_windows\test_log.txt (
+            type unzipped_windows\test_log.txt
+          ) else (
+            echo ❌ test_log.txt not found
+            exit /b 1
+          )
         shell: cmd
   release:
     name: Publish Release
