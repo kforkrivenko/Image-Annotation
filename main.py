@@ -1,16 +1,20 @@
 from utils.paths import *
 from ui.app import ImageAnnotationApp
 from pathlib import Path
-import threading
-import tkinter as tk
-from tkinter import Label
+import sys
+import os
 
-
+# === 💡 Проверка тестового режима до GUI
 if '--test' in sys.argv:
     print("✅ Test mode active")
     with open("test_log.txt", "w") as f:
         f.write("Running test mode\n")
     sys.exit(0)
+
+
+import threading
+import tkinter as tk
+from tkinter import Label
 
 # Создание необходимых директорий
 def prepare_env():
@@ -39,7 +43,6 @@ def initialize_heavy_components(callback):
         from PIL import Image, ImageTk, ImageDraw, ImageFont
         print("Heavy components initialized.")
 
-        # По завершении — вызов callback в главном потоке
         splash.after(0, callback)
 
     threading.Thread(target=task, daemon=True).start()
@@ -52,14 +55,7 @@ if __name__ == "__main__":
     def on_loaded():
         splash.destroy()
         app = ImageAnnotationApp()
-
-        if "--test" in sys.argv:
-            print("Test mode", flush=True)
-            app.root.after(3000, app.root.destroy)
-        
         app.run()
 
     initialize_heavy_components(callback=on_loaded)
     splash.mainloop()
-
-    
