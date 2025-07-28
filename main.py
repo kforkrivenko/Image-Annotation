@@ -50,7 +50,7 @@ def run_app():
                 print("[INFO] Heavy components initialized.")
                 with open(test_log_path, "a") as f:
                     f.write("[INFO] Heavy components initialized.")
-                splash.after(0, lambda: (callback(),))
+                splash.after(0, lambda: (callback(), splash.destroy()))
             except Exception as e:
                 print(f"[ERROR] Heavy init failed: {e}")
                 with open(test_log_path, "a") as f:
@@ -62,10 +62,13 @@ def run_app():
     splash = show_splash()
 
     def on_loaded():
-        splash.destroy()
         with open(test_log_path, "a") as f:
             f.write("[INFO] on_loaded executed\n")
         app = ImageAnnotationApp()
+
+        if '--test' in sys.argv:
+            app.root.after(3000, app.root.destroy)
+
         app.run()
 
     initialize_heavy_components(callback=on_loaded)
