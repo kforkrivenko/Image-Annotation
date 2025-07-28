@@ -9,7 +9,7 @@ UNAME=$(uname -s)
 
 if [[ "$UNAME" == "Darwin" ]]; then
     echo "📦 macOS: Сборка в режиме --onedir (PyInstaller onefile не работает стабильно на macOS)"
-    pyinstaller build_main.spec
+    pyinstaller --onefile --noconsole --name ImageAnnotationMain main.py
     cp -R dist/ImageAnnotationMain.app dist/macos/ImageAnnotationMain.app
 elif [[ "$UNAME" == "Linux" ]]; then
     echo "📦 Linux: Сборка в режиме --onefile"
