@@ -1,5 +1,31 @@
 import sys
 from pathlib import Path
+import os
+
+# --- macOS/Unix lock-файл для защиты от двойного запуска (особенно в PyInstaller .app) ---
+lockfile = '/tmp/nn_custom_train_tool.lock'
+if os.path.exists(lockfile):
+    print("[LOCK] Already running, exiting.")
+    sys.exit(0)
+with open(lockfile, 'w') as f:
+    f.write(str(os.getpid()))
+import atexit
+def _remove_lock():
+    try:
+        if os.path.exists(lockfile):
+            os.remove(lockfile)
+    except Exception:
+        pass
+atexit.register(_remove_lock)
+
+# --- остальной код ---
+# Проверяем, не запущено ли уже приложение
+if hasattr(sys, '_app_initialized'):
+    print("Приложение уже инициализировано")
+    sys.exit(0)
+
+# Отмечаем, что приложение инициализировано
+sys._app_initialized = True
 
 test_log_path = Path(sys.executable).parent / "test_log.txt"
 
@@ -13,18 +39,16 @@ if '--test' in sys.argv:
 
 # Только лёгкие импорты
 from utils.paths import *
-import os
+import threading
+from tkinter import Label
+import tkinter as tk
+from ui.app import ImageAnnotationApp
 
 def prepare_env():
     (DATA_DIR / "logs").mkdir(exist_ok=True)
     (DATA_DIR / "annotated_dataset").mkdir(exist_ok=True)
 
 def run_app():
-    import tkinter as tk
-    from tkinter import Label
-    import threading
-    from ui.app import ImageAnnotationApp
-
     # Создаем root — он не отображается, но нужен как родитель для splash и app
     root = tk.Tk()
     root.withdraw()

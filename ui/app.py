@@ -70,6 +70,12 @@ def get_resource_path(relative_path):
 
 class ImageAnnotationApp:
     def __init__(self, master=None):
+        # Проверяем, не создано ли уже приложение
+        if hasattr(self.__class__, '_instance'):
+            print("Приложение уже создано")
+            return
+        self.__class__._instance = self
+        
         self.root = tk.Toplevel(master=master)
         self.root.geometry("1600x1200")
         self.root.title("Image Annotation Tool")
@@ -126,6 +132,11 @@ class ImageAnnotationApp:
                 pass
 
     def _setup_ui(self):
+        # Проверяем, не происходит ли уже настройка UI
+        if hasattr(self, '_ui_setup_done'):
+            return
+        self._ui_setup_done = True
+        
         # Главная кнопка
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=50)
@@ -397,13 +408,21 @@ class ImageAnnotationApp:
 
     def _refresh_ui(self):
         """Полностью обновляет интерфейс приложения"""
-        # Удаляем все виджеты из главного окна
-        for widget in self.root.winfo_children():
-            widget.destroy()
+        # Проверяем, не происходит ли уже обновление
+        if hasattr(self, '_refreshing'):
+            return
+        self._refreshing = True
+        
+        try:
+            # Удаляем все виджеты из главного окна
+            for widget in self.root.winfo_children():
+                widget.destroy()
 
-        # Пересоздаем интерфейс
-        self._setup_ui()
-        self._setup_tested_datasets_panel()
+            # Пересоздаем интерфейс
+            self._setup_ui()
+            self._setup_tested_datasets_panel()
+        finally:
+            self._refreshing = False
 
     def _get_available_models(self):
         """Проверяет наличие скачанных моделей."""
@@ -642,16 +661,24 @@ class ImageAnnotationApp:
 
                 # Пытаемся корректно закрыть окно через 1 секунду
                 self.root.after(1000, self._safe_finalize_training)
+        else:
+            # Если поток не запущен, сбрасываем флаг
+            if hasattr(self, '_training_started'):
+                delattr(self, '_training_started')
 
     def _cancel_testing(self):
-        """Безопасная отмена обучения"""
+        """Безопасная отмена тестирования"""
         if hasattr(self, 'testing_thread') and self.testing_thread.is_alive():
             if messagebox.askyesno("Отмена", "Прервать тестирование?", parent=self.test_window):
                 self.testing_cancelled = True
-                self._safe_update_test_status("Обучение прерывается...", warning=True)
+                self._safe_update_test_status("Тестирование прерывается...", warning=True)
 
                 # Пытаемся корректно закрыть окно через 1 секунду
                 self.root.after(1000, self._safe_finalize_testing)
+        else:
+            # Если поток не запущен, сбрасываем флаг
+            if hasattr(self, '_testing_started'):
+                delattr(self, '_testing_started')
 
     def _run_training(self, batch, epochs, imgsz, workers, model_name, device):
         """Выполняет обучение модели с безопасным обновлением UI"""
@@ -900,6 +927,12 @@ class ImageAnnotationApp:
 
     def _start_training(self, popup, batch, epochs, imgsz, workers, model_name, device, class_vars, datasets):
         """Запускает обучение в отдельном потоке"""
+        # Проверяем, не запущено ли уже обучение
+        if hasattr(self, '_training_started'):
+            messagebox.showwarning("Внимание", "Обучение уже запущено")
+            return
+        self._training_started = True
+        
         from ml.yolo import prepare_yolo_dataset
         self.training_cancelled = False
         try:
@@ -909,10 +942,12 @@ class ImageAnnotationApp:
             workers = int(workers)
         except Exception as e:
             self._show_error(f"Неверный формат: {e}")
+            self._training_started = False
             return
 
         if not self.model_var:
             self._show_error("Не выбрана модель")
+            self._training_started = False
             return
 
         # Создаем окно для отображения прогресса
@@ -1050,6 +1085,12 @@ class ImageAnnotationApp:
         ).pack(pady=20)
 
     def _start_testing(self, popup, class_vars, datasets, batch, imgsz, conf, iou, device):
+        # Проверяем, не запущено ли уже тестирование
+        if hasattr(self, '_testing_started'):
+            messagebox.showwarning("Внимание", "Тестирование уже запущено")
+            return
+        self._testing_started = True
+        
         # Создаем окно для отображения прогресса
         from ml.yolo import prepare_yolo_dataset
         self.testing_cancelled = False
@@ -1060,6 +1101,7 @@ class ImageAnnotationApp:
             iou = float(iou)
         except Exception as e:
             self._show_error(f"Неверный формат: {e}")
+            self._testing_started = False
             return
         self._create_testing_window(popup)
 
@@ -1107,6 +1149,11 @@ class ImageAnnotationApp:
 
     def _setup_tested_datasets_panel(self):
         """Настройка панели протестированных датасетов"""
+        # Проверяем, не происходит ли уже настройка панели
+        if hasattr(self, '_tested_panel_setup_done'):
+            return
+        self._tested_panel_setup_done = True
+        
         # Очищаем предыдущие элементы
         for widget in self.tested_scrollable_frame.winfo_children():
             widget.destroy()
@@ -1275,33 +1322,53 @@ class ImageAnnotationApp:
 
     def _safe_finalize_training(self):
         """Безопасное завершение обучения"""
+        # Проверяем, не происходит ли уже завершение
+        if hasattr(self, '_finalizing_training'):
+            return
+        self._finalizing_training = True
 
         def finalize():
-            if hasattr(self, 'train_window') and self.train_window.winfo_exists():
-                if not getattr(self, 'training_cancelled', False):
-                    messagebox.showinfo("Готово", "Обучение модели завершено!", parent=self.train_window)
-                self.train_window.destroy()
-                self._refresh_ui()
+            try:
+                if hasattr(self, 'train_window') and self.train_window.winfo_exists():
+                    if not getattr(self, 'training_cancelled', False):
+                        messagebox.showinfo("Готово", "Обучение модели завершено!", parent=self.train_window)
+                    self.train_window.destroy()
+                    self._refresh_ui()
+            finally:
+                self._finalizing_training = False
+                # Сбрасываем флаг запуска обучения
+                if hasattr(self, '_training_started'):
+                    delattr(self, '_training_started')
 
         try:
             self.root.after(0, finalize)
         except:
-            pass
+            self._finalizing_training = False
 
     def _safe_finalize_testing(self):
-        """Безопасное завершение обучения"""
+        """Безопасное завершение тестирования"""
+        # Проверяем, не происходит ли уже завершение
+        if hasattr(self, '_finalizing_testing'):
+            return
+        self._finalizing_testing = True
 
         def finalize():
-            if hasattr(self, 'test_window') and self.test_window.winfo_exists():
-                if not getattr(self, 'testing_cancelled', False):
-                    messagebox.showinfo("Готово", "Тестирование модели завершено!", parent=self.test_window)
-                self.test_window.destroy()
-                self._refresh_ui()
+            try:
+                if hasattr(self, 'test_window') and self.test_window.winfo_exists():
+                    if not getattr(self, 'testing_cancelled', False):
+                        messagebox.showinfo("Готово", "Тестирование модели завершено!", parent=self.test_window)
+                    self.test_window.destroy()
+                    self._refresh_ui()
+            finally:
+                self._finalizing_testing = False
+                # Сбрасываем флаг запуска тестирования
+                if hasattr(self, '_testing_started'):
+                    delattr(self, '_testing_started')
 
         try:
             self.root.after(0, finalize)
         except:
-            pass
+            self._finalizing_testing = False
 
     def _update_train_status(self, message, success=False, error=False):
         """Обновляет статус обучения в UI"""
