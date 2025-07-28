@@ -159,23 +159,28 @@ jobs:
           name: ImageAnnotation-macos
           path: ./dist/macos
 
+      - name: Unzip artefact
+        run: |
+          unzip -q ./dist/macos/ImageAnnotation-macos.zip -d ./unzipped_macos
+
       - name: Make binary executable
         run: |
-          chmod +x ./dist/macos/ImageAnnotationMain.app/Contents/MacOS/ImageAnnotationMain
+          chmod +x ./unzipped_macos/ImageAnnotationMain.app/Contents/MacOS/ImageAnnotationMain
 
       - name: Smoke test .app executable
         run: |
           echo "Running test executable..."
-          ./dist/macos/ImageAnnotationMain.app/Contents/MacOS/ImageAnnotationMain --test --full || exit 1
+          ./unzipped_macos/ImageAnnotationMain.app/Contents/MacOS/ImageAnnotationMain --test --full || exit 1
           echo "✅ Test completed"
 
       - name: Check test log output
         run: |
-          if [ -f "./dist/macos/ImageAnnotationMain.app/Contents/MacOS/test_log.txt" ]; then
-            cat ./dist/macos/ImageAnnotationMain.app/Contents/MacOS/test_log.txt
+          if [ -f "./unzipped_macos/ImageAnnotationMain.app/Contents/MacOS/test_log.txt" ]; then
+            cat ./unzipped_macos/ImageAnnotationMain.app/Contents/MacOS/test_log.txt
           else
             echo "❌ test_log.txt not found"
             exit 1
+          fi
   release:
     name: Publish Release
     runs-on: ubuntu-latest
