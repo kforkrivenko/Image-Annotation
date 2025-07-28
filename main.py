@@ -45,11 +45,13 @@ if __name__ == "__main__":
     def on_loaded():
         splash.destroy()
         app = ImageAnnotationApp()
-        app.run()
 
         if "--test" in sys.argv:
-            print("Test mode")
+            print("Test mode", flush=True)
             app.root.after(3000, app.root.destroy)
+            sys.exit(0)
+        
+        app.run()
 
     initialize_heavy_components(callback=on_loaded)
     splash.mainloop()
