@@ -50,8 +50,8 @@ def run_app():
                 print("[INFO] Heavy components initialized.")
                 with open(test_log_path, "a") as f:
                     f.write("[INFO] Heavy components initialized.")
-                splash.after(0, splash.destroy)
                 splash.after(0, callback)
+                splash.after(0, splash.destroy)
             except Exception as e:
                 print(f"[ERROR] Heavy init failed: {e}")
                 with open(test_log_path, "a") as f:
