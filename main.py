@@ -49,7 +49,6 @@ if __name__ == "__main__":
         if "--test" in sys.argv:
             print("Test mode", flush=True)
             app.root.after(3000, app.root.destroy)
-            sys.exit(0)
         
         app.run()
 
