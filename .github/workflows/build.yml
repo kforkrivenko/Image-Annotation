@@ -138,7 +138,7 @@ jobs:
         shell: cmd
         run: |
           echo Running test executable...
-          .\unzipped_windows\ImageAnnotationMain.exe --test || exit /b 1
+          .\unzipped_windows\ImageAnnotationMain.exe --test --full || exit /b 1
           echo Test completed
       - name: Check test log output
         run: |

@@ -7,8 +7,10 @@ test_log_path = Path(sys.executable).parent / "test_log.txt"
 if '--test' in sys.argv:
     print("Test mode active")
     with open(test_log_path, "a") as f:
-        f.write("Running test mode\n")
-    sys.exit(0)
+        f.write("[INFO] Running test mode\n")
+
+    if '--full' not in sys.argv:
+        sys.exit(0)
 
 # Только лёгкие импорты
 from utils.paths import *
@@ -45,7 +47,10 @@ def run_app():
                 from ultralytics import YOLO
                 from sklearn.model_selection import train_test_split
                 from PIL import Image, ImageTk, ImageDraw, ImageFont
-                print("Heavy components initialized.")
+                print("[INFO] Heavy components initialized.")
+                with open(test_log_path, "a") as f:
+                    f.write("[INFO] Heavy components initialized.")
+                splash.after(0, splash.destroy)
                 splash.after(0, callback)
             except Exception as e:
                 print(f"[ERROR] Heavy init failed: {e}")
