@@ -2,7 +2,7 @@ import sys
 
 # 💡 Обработка --test до ВСЕГО
 if '--test' in sys.argv:
-    print("✅ Test mode active")
+    print("Test mode active")
     with open("test_log.txt", "w") as f:
         f.write("Running test mode\n")
     sys.exit(0)
