@@ -72,7 +72,10 @@ def run_app():
 
         app = ImageAnnotationApp(master=root)
         if '--test' in sys.argv:
-            app.root.after(3000, app.root.destroy)
+            def close_app():
+                app.root.destroy()
+                root.quit()
+            app.root.after(3000, close_app)
 
     initialize_heavy_components(callback=on_loaded)
     root.mainloop()
