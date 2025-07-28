@@ -60,8 +60,8 @@ def get_resource_path(relative_path):
 
 
 class ImageAnnotationApp:
-    def __init__(self):
-        self.root = tk.Tk()
+    def __init__(self, master=None):
+        self.root = tk.Toplevel(master=master)
         self.root.geometry("1600x1200")
         self.root.title("Image Annotation Tool")
         self._set_window_icon()
@@ -70,6 +70,16 @@ class ImageAnnotationApp:
         self.deleter_test = DatasetDeleter(self.root, test_dataset=True)
         self.root.bind("<<RefreshDatasets>>", lambda e: self.get_annotated_datasets())
         self.root.bind("<<RefreshTestedDatasets>>", lambda e: self.get_tested_datasets())
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def on_close(self):
+        try:
+            if self.root.master:
+                self.root.master.quit()
+                self.root.master.destroy()
+            self.root.destroy()
+        except tk.TclError:
+            pass  # окно уже уничтожено
 
     def _set_window_icon(self):
         """Устанавливает иконку в зависимости от ОС"""
@@ -1347,6 +1357,7 @@ class ImageAnnotationApp:
             if image_files:
                 try:
                     from PIL import Image, ImageTk
+                    print(f"[INFO] Loading image: {image_files[0]}")
                     img = Image.open(image_files[0])
                     img.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE))
                     photo = ImageTk.PhotoImage(img)
