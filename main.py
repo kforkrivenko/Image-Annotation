@@ -2,8 +2,9 @@ import sys
 from pathlib import Path
 import os
 
-# --- macOS/Unix lock-файл для защиты от двойного запуска (особенно в PyInstaller .app) ---
-lockfile = '/tmp/nn_custom_train_tool.lock'
+# --- Кроссплатформенный lock-файл для защиты от двойного запуска (особенно в PyInstaller .app) ---
+import tempfile
+lockfile = os.path.join(tempfile.gettempdir(), 'nn_custom_train_tool.lock')
 if os.path.exists(lockfile):
     print("[LOCK] Already running, exiting.")
     sys.exit(0)
