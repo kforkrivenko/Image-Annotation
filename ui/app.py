@@ -4,6 +4,7 @@ import sys
 import tempfile
 import threading
 import tkinter as tk
+import time
 from collections import defaultdict
 from datetime import datetime
 from time import sleep
@@ -11,6 +12,7 @@ from api.api import get_dataset, get_datasets_info
 from tkinter import ttk, filedialog, messagebox, simpledialog
 from pathlib import Path
 import zipfile
+import yaml
 
 from data_processing.annotation_popover import AnnotationPopover, get_unique_folder_name
 from utils.dataset_deleter import DatasetDeleter
@@ -280,10 +282,18 @@ class ImageAnnotationApp:
         )
         self.rename_button.pack(pady=5)
 
-        # Если моделей нет — отключаем список и кнопку
+        self.delete_button = ttk.Button(
+            self.model_frame,
+            text="Удалить",
+            command=self._delete_model
+        )
+        self.delete_button.pack(pady=5)
+
+        # Если моделей нет — отключаем список и кнопки
         if not self.available_models:
             self.model_listbox.configure(state="disabled")
             self.rename_button.configure(state="disabled")
+            self.delete_button.configure(state="disabled")
 
 
         # Блок кнопок скачивания
@@ -399,12 +409,61 @@ class ImageAnnotationApp:
                 return
             try:
                 os.rename(old_path, new_path)
-                self.available_models = self._get_available_models()
-                self.model_listbox.delete(0, tk.END)
-                for model in self.available_models:
-                    self.model_listbox.insert(tk.END, model)
+                self._refresh_models_list()
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось переименовать модель:\n{e}")
+
+    def _delete_model(self):
+        selection = self.model_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("Нет выбора", "Выберите модель для удаления.")
+            return
+
+        model_name = self.model_listbox.get(selection[0])
+        
+        # Запрещаем удаление базовых моделей
+        if not model_name.endswith('_custom') and not '_best' in model_name:
+            messagebox.showwarning("Внимание", "Нельзя удалять базовые модели (yolov8n.pt, yolov8s.pt и т.д.).")
+            return
+
+        # Запрашиваем подтверждение
+        confirm = messagebox.askyesno(
+            "Подтверждение удаления", 
+            f"Вы уверены, что хотите удалить модель '{model_name}'?\n\nЭто действие нельзя отменить.",
+            icon='warning'
+        )
+        
+        if confirm:
+            models_dir = DATA_DIR / "models"
+            model_path = models_dir / model_name
+            
+            try:
+                os.remove(model_path)
+                messagebox.showinfo("Готово", f"Модель '{model_name}' успешно удалена.")
+                self._refresh_models_list()
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось удалить модель:\n{e}")
+
+    def _refresh_models_list(self):
+        """Обновляет список моделей в интерфейсе"""
+        self.available_models = self._get_available_models()
+        self.model_listbox.delete(0, tk.END)
+        for model in self.available_models:
+            self.model_listbox.insert(tk.END, model)
+        
+        # Обновляем состояние кнопок
+        if self.available_models:
+            self.model_listbox.configure(state="normal")
+            self.rename_button.configure(state="normal")
+            self.delete_button.configure(state="normal")
+            # Устанавливаем выбранную модель, если есть
+            if not self.model_listbox.curselection():
+                self.model_listbox.selection_set(0)
+                self.model_var.set(self.available_models[0])
+        else:
+            self.model_listbox.configure(state="disabled")
+            self.rename_button.configure(state="disabled")
+            self.delete_button.configure(state="disabled")
 
     def _refresh_ui(self):
         """Обновляет интерфейс приложения"""
@@ -438,13 +497,7 @@ class ImageAnnotationApp:
 
         messagebox.showinfo("Модель загружена", f"Модель {model_name} успешно скачана.")
         # Обновляем список моделей
-        self.available_models = self._get_available_models()
-        self.model_listbox.delete(0, tk.END)
-        for model in self.available_models:
-            self.model_listbox.insert(tk.END, model)
-        if self.available_models:
-            self.model_listbox.selection_set(0)
-            self.model_var.set(self.available_models[0])
+        self._refresh_models_list()
 
     def _download_user_model(self):
         """Cкачивания модели."""
@@ -466,13 +519,7 @@ class ImageAnnotationApp:
             shutil.copy2(Path(filepath), dest_path)
             messagebox.showinfo("Модель загружена", f"Модель {Path(filepath).name} успешно скачана.")
             # Обновляем список моделей
-            self.available_models = self._get_available_models()
-            self.model_listbox.delete(0, tk.END)
-            for model in self.available_models:
-                self.model_listbox.insert(tk.END, model)
-            if self.available_models:
-                self.model_listbox.selection_set(0)
-                self.model_var.set(self.available_models[0])
+            self._refresh_models_list()
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка при загрузке файла: {str(e)}")
 
@@ -705,8 +752,119 @@ class ImageAnnotationApp:
 
             self._safe_update_train_status("Загрузка модели...")
             model_variant = self.model_var.get()
-            model = YOLO(DATA_DIR / 'models' / model_variant)
+            print(f"[DEBUG] Выбранная модель: {model_variant}")
+            print(f"[DEBUG] Доступные модели: {[f.name for f in (DATA_DIR / 'models').glob('*.pt')]}")
+            
+            # Для обучения всегда используем базовую модель (не обученную)
+            base_model_name = model_variant.split('_custom')[0] + '.pt'
+            if '_custom' not in model_variant:
+                base_model_name = model_variant  # Если уже базовая модель
+                
+            print(f"[DEBUG] Используем базовую модель для обучения: {base_model_name}")
+            
+            # Проверяем, существует ли базовая модель
+            model_path = DATA_DIR / 'models' / base_model_name
+            if not model_path.exists():
+                self._safe_update_train_status(f"Ошибка: Базовая модель {base_model_name} не найдена", error=True)
+                return
+                
+            try:
+                model = YOLO(model_path)
+                print(f"[DEBUG] Загружена базовая модель для обучения: {model_path}")
+            except Exception as e:
+                self._safe_update_train_status(f"Ошибка загрузки модели: {str(e)}", error=True)
+                return
 
+            # Проверяем данные перед обучением
+            data_yaml_path = DATA_DIR / "data" / model_name / 'data.yaml'
+            if not data_yaml_path.exists():
+                self._safe_update_train_status("Ошибка: Файл data.yaml не найден", error=True)
+                return
+                
+            # Проверяем содержимое data.yaml
+            try:
+                import yaml
+                with open(data_yaml_path, 'r', encoding='utf-8') as f:
+                    data_config = yaml.safe_load(f)
+                
+                # Проверяем количество классов
+                if 'nc' in data_config:
+                    num_classes = data_config['nc']
+                    print(f"[DEBUG] Количество классов в data.yaml: {num_classes}")
+                    
+                    if num_classes == 0:
+                        self._safe_update_train_status("Ошибка: Нет классов в датасете", error=True)
+                        return
+                        
+                    if num_classes == 1:
+                        print("[WARNING] Только один класс в датасете - это может вызвать проблемы")
+                        
+                # Проверяем имена классов
+                if 'names' in data_config:
+                    class_names = data_config['names']
+                    print(f"[DEBUG] Имена классов: {class_names}")
+                    
+                    # Проверяем, что индексы классов корректны
+                    if len(class_names) != num_classes:
+                        print(f"[WARNING] Несоответствие: {len(class_names)} имен классов, но {num_classes} классов")
+                        
+                # Проверяем пути к данным
+                if 'train' in data_config:
+                    train_path = Path(data_config['train'])
+                    if not train_path.exists():
+                        self._safe_update_train_status("Ошибка: Путь к тренировочным данным не найден", error=True)
+                        return
+                        
+                if 'val' in data_config:
+                    val_path = Path(data_config['val'])
+                    if not val_path.exists():
+                        self._safe_update_train_status("Ошибка: Путь к валидационным данным не найден", error=True)
+                        return
+                        
+                # Проверяем файлы разметки
+                train_labels_path = Path(data_config.get('train', '')).parent / 'labels'
+                if train_labels_path.exists():
+                    label_files = list(train_labels_path.glob('*.txt'))
+                    print(f"[DEBUG] Найдено файлов разметки: {len(label_files)}")
+                    
+                    # Проверяем первые несколько файлов на корректность индексов
+                    max_class_idx = 0
+                    for label_file in label_files[:5]:  # Проверяем первые 5 файлов
+                        try:
+                            with open(label_file, 'r') as f:
+                                lines = f.readlines()
+                                for line in lines:
+                                    parts = line.strip().split()
+                                    if len(parts) >= 5:
+                                        class_idx = int(parts[0])
+                                        max_class_idx = max(max_class_idx, class_idx)
+                                        if class_idx >= num_classes:
+                                            print(f"[WARNING] Неправильный индекс класса {class_idx} в файле {label_file}")
+                        except Exception as e:
+                            print(f"[WARNING] Ошибка чтения файла {label_file}: {e}")
+                    
+                    print(f"[DEBUG] Максимальный индекс класса в разметке: {max_class_idx}")
+                    if max_class_idx >= num_classes:
+                        print(f"[WARNING] Индексы классов превышают количество классов! Максимум: {max_class_idx}, классов: {num_classes}")
+                        # Предлагаем исправить data.yaml
+                        try:
+                            # Обновляем количество классов в data.yaml
+                            data_config['nc'] = max_class_idx + 1
+                            with open(data_yaml_path, 'w', encoding='utf-8') as f:
+                                yaml.dump(data_config, f, default_flow_style=False)
+                            print(f"[DEBUG] Исправлен data.yaml: количество классов = {max_class_idx + 1}")
+                        except Exception as e:
+                            print(f"[ERROR] Не удалось исправить data.yaml: {e}")
+                        
+            except Exception as e:
+                print(f"[DEBUG] Ошибка при проверке data.yaml: {e}")
+                # Продолжаем обучение, но с предупреждением
+
+            # Проверяем, что модель была успешно загружена
+            if 'model' not in locals() or model is None:
+                self._safe_update_train_status("Ошибка: Модель не была загружена", error=True)
+                return
+                
             self._safe_update_train_status("Начинаем обучение...")
             self._safe_set_progress_max(epochs)
 
@@ -739,10 +897,37 @@ class ImageAnnotationApp:
                 self._safe_update_train_status("Обучение завершено!", success=True)
 
         except Exception as e:
-            self._safe_update_train_status(f"Ошибка: {str(e)}", error=True)
+            error_msg = f"Ошибка: {str(e)}"
+            print(f"[TRAINING ERROR] {error_msg}")
+            print(f"[TRAINING ERROR] Exception type: {type(e).__name__}")
+            import traceback
+            traceback.print_exc()
+            tb = traceback.format_exc()
+            
+            test_log_path = Path(sys.executable).parent / "test_log.txt"
+            with open(test_log_path, "a") as f:
+                f.write(f"[TRAINING ERROR] {error_msg}\n")
+                f.write(f"[TRAINING ERROR] Exception type: {type(e).__name__}\n")
+                f.write(f"[TRAINING ERROR] Traceback:\n{tb}\n")
+            
+            # Дополнительная диагностика для типичных ошибок
+            if "index" in str(e) and "out of bounds" in str(e):
+                error_msg += "\n\nВозможные причины:\n"
+                error_msg += "1. Недостаточно классов в датасете\n"
+                error_msg += "2. Проблема с разметкой - неправильные индексы классов\n"
+                error_msg += "3. Конфликт версий библиотек\n"
+                error_msg += "4. Проблема с форматом данных YAML\n\n"
+                error_msg += "Попробуйте:\n"
+                error_msg += "- Добавить больше изображений с разметкой\n"
+                error_msg += "- Проверить, что все классы имеют аннотации\n"
+                error_msg += "- Убедиться, что индексы классов начинаются с 0\n"
+                error_msg += "- Обновить ultralytics: pip install --upgrade ultralytics\n"
+                error_msg += "- Проверить файл data.yaml на корректность"
+            
+            self._safe_update_train_status(error_msg, error=True)
         finally:
             # Корректное освобождение ресурсов
-            if model is not None:
+            if 'model' in locals() and model is not None:
                 try:
                     model.model.cpu()  # Переводим модель на CPU перед удалением
                     del model
@@ -751,6 +936,7 @@ class ImageAnnotationApp:
                     destination_path = DATA_DIR / "models" / f"{model_name}_best.pt"
                     if best_pt_path.exists():
                         shutil.copy2(best_pt_path, destination_path)
+                        print(f"[DEBUG] Обученная модель скопирована: {destination_path}")
                 except:
                     pass
 
@@ -1343,9 +1529,19 @@ class ImageAnnotationApp:
                     if not getattr(self, 'training_cancelled', False):
                         messagebox.showinfo("Готово", "Обучение модели завершено!", parent=self.train_window)
                     self.train_window.destroy()
-                    # Обновляем списки датасетов
+                    # Обновляем списки датасетов и моделей
                     self.get_annotated_datasets()
                     self.get_tested_datasets()
+                    self._refresh_models_list()
+                    
+                    # Показываем уведомление о новой модели
+                    if not getattr(self, 'training_cancelled', False):
+                        # Ищем новую обученную модель
+                        models_dir = DATA_DIR / "models"
+                        new_models = [f for f in models_dir.glob(f"*_best.pt") if f.stat().st_mtime > time.time() - 60]  # Модели созданные за последнюю минуту
+                        if new_models:
+                            latest_model = max(new_models, key=lambda x: x.stat().st_mtime)
+                            messagebox.showinfo("Новая модель", f"Обученная модель '{latest_model.name}' добавлена в список!")
             finally:
                 self._finalizing_training = False
                 # Сбрасываем флаг запуска обучения
