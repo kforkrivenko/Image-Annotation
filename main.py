@@ -1,14 +1,16 @@
 import sys
 
+from pathlib import Path
+test_log_path = Path(sys.executable).parent / "test_log.txt"
+
 # 💡 Обработка --test до ВСЕГО
 if '--test' in sys.argv:
     print("Test mode active")
-    with open("test_log.txt", "a") as f:
+    with open(test_log_path, "a") as f:
         f.write("Running test mode\n")
     sys.exit(0)
 
 # Только лёгкие импорты
-from pathlib import Path
 from utils.paths import *
 import os
 
@@ -57,7 +59,7 @@ def run_app():
 
     def on_loaded():
         splash.destroy()
-        with open("test_log.txt", "a") as f:
+        with open(test_log_path, "a") as f:
             f.write("[INFO] on_loaded executed\n")
         app = ImageAnnotationApp()
         app.run()
