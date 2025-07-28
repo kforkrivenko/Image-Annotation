@@ -126,13 +126,17 @@ jobs:
     needs: build-windows
     runs-on: windows-latest
     steps: 
-      - uses: actions/download-artifact@v4
+      - name: Download artefact
+        uses: actions/download-artifact@v4
         with:
           name: ImageAnnotation-windows
           path: ./dist/windows 
+      - name: Unzip artefact 
+        run:
+          Expand-Archive -Path ./dist/windows/ImageAnnotation-windows.zip -DestinationPath ./unzipped_windows
       - name: Smoke test exe
         run:
-          .\dist\windows\ImageAnnotationMain.exe || exit /b 1
+          .\unzipped_windows\ImageAnnotationMain.exe || exit /b 1
   release:
     name: Publish Release
     runs-on: ubuntu-latest
