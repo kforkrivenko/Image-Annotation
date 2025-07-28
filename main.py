@@ -3,7 +3,7 @@ import sys
 # 💡 Обработка --test до ВСЕГО
 if '--test' in sys.argv:
     print("Test mode active")
-    with open("test_log.txt", "w") as f:
+    with open("test_log.txt", "a") as f:
         f.write("Running test mode\n")
     sys.exit(0)
 
@@ -34,16 +34,22 @@ def run_app():
 
     def initialize_heavy_components(callback):
         def task():
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-            import torch
-            import cv2
-            from ultralytics import YOLO
-            from sklearn.model_selection import train_test_split
-            from PIL import Image, ImageTk, ImageDraw, ImageFont
-            print("Heavy components initialized.")
-            splash.after(0, callback)
+            try:
+                import matplotlib
+                matplotlib.use("Agg")
+                import matplotlib.pyplot as plt
+                import torch
+                import cv2
+                from ultralytics import YOLO
+                from sklearn.model_selection import train_test_split
+                from PIL import Image, ImageTk, ImageDraw, ImageFont
+                print("Heavy components initialized.")
+                splash.after(0, callback)
+            except Exception as e:
+                print(f"[ERROR] Heavy init failed: {e}")
+                with open("test_log.txt", "a") as f:
+                    f.write(f"[ERROR] Heavy init failed: {e}\n")
+                splash.after(0, splash.destroy)
 
         threading.Thread(target=task, daemon=True).start()
 
@@ -51,6 +57,8 @@ def run_app():
 
     def on_loaded():
         splash.destroy()
+        with open("test_log.txt", "a") as f:
+            f.write("[INFO] on_loaded executed\n")
         app = ImageAnnotationApp()
         app.run()
 
