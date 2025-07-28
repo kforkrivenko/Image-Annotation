@@ -17,7 +17,7 @@ elif [[ "$UNAME" == "Linux" ]]; then
     cp dist/ImageAnnotationMain dist/linux/ImageAnnotationMain
 elif [[ "$UNAME" == *NT* ]] || [[ "$UNAME" == *MINGW* ]] || [[ "$UNAME" == *MSYS* ]] || [[ "$UNAME" == *CYGWIN* ]]; then
     echo "📦 Windows: Сборка в режиме --onefile"
-    pyinstaller build_main.spec
+    pyinstaller --onefile --noconsole --name ImageAnnotationMain main.py
     cp dist/ImageAnnotationMain.exe dist/windows/ImageAnnotationMain.exe
 else
     echo "❌ Неизвестная платформа: $UNAME"
