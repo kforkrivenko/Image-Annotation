@@ -421,10 +421,10 @@ class ImageAnnotationApp:
 
         model_name = self.model_listbox.get(selection[0])
         
-        # Запрещаем удаление базовых моделей
-        if not model_name.endswith('_custom') and not '_best' in model_name:
-            messagebox.showwarning("Внимание", "Нельзя удалять базовые модели (yolov8n.pt, yolov8s.pt и т.д.).")
-            return
+        # # Запрещаем удаление базовых моделей
+        # if not model_name.endswith('_custom') and not '_best' in model_name:
+        #     messagebox.showwarning("Внимание", "Нельзя удалять базовые модели (yolov8n.pt, yolov8s.pt и т.д.).")
+        #     return
 
         # Запрашиваем подтверждение
         confirm = messagebox.askyesno(
@@ -651,7 +651,7 @@ class ImageAnnotationApp:
 
     def _create_training_window(self, parent):
         """Создает окно для отображения прогресса обучения"""
-        self.train_window = tk.Toplevel(parent)
+        self.train_window = tk.Toplevel(self.root)
         self.train_window.title("Процесс обучения")
         self.train_window.geometry("800x600")
 
@@ -678,10 +678,14 @@ class ImageAnnotationApp:
         # Перенаправляем вывод
         sys.stdout = TextRedirector(self.train_output)
         sys.stderr = TextRedirector(self.train_output)
+        
+        # Закрываем окно настроек после создания окна прогресса
+        if parent and parent.winfo_exists():
+            parent.destroy()
 
     def _create_testing_window(self, parent):
         """Создает окно для отображения прогресса обучения"""
-        self.test_window = tk.Toplevel(parent)
+        self.test_window = tk.Toplevel(self.root)
         self.test_window.title("Процесс тестирования")
         self.test_window.geometry("800x600")
 
@@ -708,20 +712,30 @@ class ImageAnnotationApp:
         # Перенаправляем вывод
         sys.stdout = TextRedirector(self.test_output)
         sys.stderr = TextRedirector(self.test_output)
+        
+        # Закрываем окно настроек после создания окна прогресса
+        if parent and parent.winfo_exists():
+            parent.destroy()
 
     def _cancel_training(self):
         """Безопасная отмена обучения"""
         if hasattr(self, 'training_thread') and self.training_thread.is_alive():
-            if messagebox.askyesno("Отмена", "Прервать обучение?", parent=self.train_window):
+            if messagebox.askyesno("Отмена", "Прервать обучение?\n\nПримечание: Обучение завершится после завершения текущей эпохи.", parent=self.train_window):
                 self.training_cancelled = True
-                self._safe_update_train_status("Обучение прерывается...", warning=True)
+                self._safe_update_train_status("Обучение прерывается... (завершится после текущей эпохи)", warning=True)
 
+                # Ждем завершения потока с более длительным таймаутом
+                self.training_thread.join(timeout=30.0)
+                
+                # Сбрасываем флаг отмены
+                self.training_cancelled = False
+                
                 # Пытаемся корректно закрыть окно через 1 секунду
                 self.root.after(1000, self._safe_finalize_training)
         else:
             # Если поток не запущен, сбрасываем флаг
             if hasattr(self, '_training_started'):
-                delattr(self, '_training_started')
+                self._training_started = False
 
     def _cancel_testing(self):
         """Безопасная отмена тестирования"""
@@ -878,6 +892,11 @@ class ImageAnnotationApp:
 
                 custom_project_dir = DATA_DIR / "data" / model_name / "result"
 
+                # Проверяем отмену перед началом обучения
+                if getattr(self, 'training_cancelled', False):
+                    self._safe_update_train_status("Обучение прервано", warning=True)
+                    break
+
                 results = model.train(
                     data=str(DATA_DIR / "data" / model_name / 'data.yaml'),
                     epochs=1,
@@ -892,6 +911,11 @@ class ImageAnnotationApp:
                     project=str(custom_project_dir),
                     exist_ok=True  # Разрешаем перезапись
                 )
+
+                # Проверяем отмену после завершения эпохи
+                if getattr(self, 'training_cancelled', False):
+                    self._safe_update_train_status("Обучение прервано", warning=True)
+                    break
 
             if not getattr(self, 'training_cancelled', False):
                 self._safe_update_train_status("Обучение завершено!", success=True)
@@ -953,6 +977,11 @@ class ImageAnnotationApp:
             # Восстановление стандартных потоков
             sys.stdout = sys.__stdout__
             sys.stderr = sys.__stderr__
+
+            # Сбрасываем флаги обучения
+            if hasattr(self, '_training_started'):
+                self._training_started = False
+            self.training_cancelled = False
 
             self._safe_finalize_training()
 
@@ -1152,7 +1181,8 @@ class ImageAnnotationApp:
         # Подготовка данных в основном потоке
         selected_classes = [name for name, var in class_vars.items() if var.get()]
         if not selected_classes:
-            messagebox.showwarning("Внимание", "Выберите хотя бы один класс для обучения", parent=popup)
+            messagebox.showwarning("Внимание", "Выберите хотя бы один класс для обучения")
+            self._training_started = False
             return
         selected_datasets = [dataset.name for dataset in datasets]
 
@@ -1307,7 +1337,7 @@ class ImageAnnotationApp:
         else:
             selected_classes = [name for name, var in class_vars.items() if var.get()]
         if not selected_classes:
-            messagebox.showwarning("Внимание", "Выберите хотя бы один класс для тестирования", parent=popup)
+            messagebox.showwarning("Внимание", "Выберите хотя бы один класс для тестирования")
             return
 
         selected_datasets = [dataset.name for dataset in datasets]
@@ -1346,9 +1376,9 @@ class ImageAnnotationApp:
     def _setup_tested_datasets_panel(self):
         """Настройка панели протестированных датасетов"""
         # Проверяем, не происходит ли уже настройка панели
-        if hasattr(self, '_tested_panel_setup_done'):
-            return
-        self._tested_panel_setup_done = True
+        # if hasattr(self, '_tested_panel_setup_done'):
+        #     return
+        # self._tested_panel_setup_done = True
         
         # Очищаем предыдущие элементы
         for widget in self.tested_scrollable_frame.winfo_children():
@@ -1514,7 +1544,7 @@ class ImageAnnotationApp:
 
     def _remove_tested_dataset(self, folder_path):
         self.deleter_test.delete_datasets([folder_path])
-        self._setup_tested_datasets_panel()
+        self._refresh_tested_datasets_only()
 
     def _safe_finalize_training(self):
         """Безопасное завершение обучения"""
@@ -1530,9 +1560,10 @@ class ImageAnnotationApp:
                         messagebox.showinfo("Готово", "Обучение модели завершено!", parent=self.train_window)
                     self.train_window.destroy()
                     # Обновляем списки датасетов и моделей
-                    self.get_annotated_datasets()
-                    self.get_tested_datasets()
+                    print(f"[DEBUG] Обновляем интерфейс после завершения обучения")
+                    self._refresh_annotated_datasets_only()
                     self._refresh_models_list()
+                    self._refresh_tested_datasets_only()
                     
                     # Показываем уведомление о новой модели
                     if not getattr(self, 'training_cancelled', False):
@@ -1567,8 +1598,8 @@ class ImageAnnotationApp:
                         messagebox.showinfo("Готово", "Тестирование модели завершено!", parent=self.test_window)
                     self.test_window.destroy()
                     # Обновляем списки датасетов
-                    self.get_annotated_datasets()
-                    self.get_tested_datasets()
+                    self._refresh_annotated_datasets_only()
+                    self._refresh_tested_datasets_only()
             finally:
                 self._finalizing_testing = False
                 # Сбрасываем флаг запуска тестирования
@@ -1778,6 +1809,11 @@ class ImageAnnotationApp:
 
             self.annotated_datasets.append(item_frame)
 
+    def _refresh_annotated_datasets_only(self):
+        """Обновляет только панель аннотированных датасетов без пересоздания всего UI"""
+        # Просто вызываем оригинальный метод, так как он уже безопасен
+        self.get_annotated_datasets()
+
     def _download_dataset(self, dataset_folder, test=False):
         """Метод для вызова из интерфейса"""
         output_dir = DATA_DIR / "annotated_dataset"
@@ -1796,15 +1832,22 @@ class ImageAnnotationApp:
             annotations = None
             blazons = None
 
-        # Спрашиваем пользователя о формате скачивания
-        format_choice = messagebox.askyesnocancel(
-            "Выбор формата",
-            "Выберите формат скачивания:\n\n"
-            "Yes - скачать аннотированные изображения (разметка будет на картинках)\n"
-            "No - скачать оригинальные изображения + JSON файлы\n"
-            "Cancel — отменить операцию",
-            parent=self.root
-        )
+        # Спрашиваем пользователя о скачивании
+        if test:
+            format_choice = messagebox.askyesno(
+                "Скачивание",
+                f"Скачать протестированный датасет '{real_name}'?",
+                parent=self.root
+            )
+        else:
+            format_choice = messagebox.askyesnocancel(
+                "Выбор формата",
+                "Выберите формат скачивания:\n\n"
+                "Yes - скачать аннотированные изображения (разметка будет на картинках)\n"
+                "No - скачать оригинальные изображения + JSON файлы\n"
+                "Cancel — отменить операцию",
+                parent=self.root
+            )
 
         # Показываем индикатор загрузки
         if format_choice is not None:
@@ -1821,32 +1864,45 @@ class ImageAnnotationApp:
         if format_choice is None:
             return
         elif format_choice == True:
-            # Скачиваем аннотированные изображения
-            threading.Thread(
-                target=lambda: self._download_annotated_images(
-                    dataset_folder,
-                    real_name,
-                    annotations,
-                    download_complete_callback
-                ),
-                daemon=True
-            ).start()
+            # Скачиваем изображения
+            if test:
+                # Для протестированных датасетов скачиваем изображения
+                threading.Thread(
+                    target=lambda: self._download_test_images(
+                        dataset_folder,
+                        real_name,
+                        download_complete_callback
+                    ),
+                    daemon=True
+                ).start()
+            else:
+                # Для аннотированных датасетов добавляем аннотации
+                threading.Thread(
+                    target=lambda: self._download_annotated_images(
+                        dataset_folder,
+                        real_name,
+                        annotations,
+                        download_complete_callback
+                    ),
+                    daemon=True
+                ).start()
         elif format_choice == False:
-            # Скачиваем оригинальные изображения + JSON
-            extra_data = [
-                (annotations, 'annotations.json'),
-                (blazons, 'blazons.json')
-            ]
-            threading.Thread(
-                target=lambda: download_dataset_with_notification(
-                    self.root,
-                    dataset_folder,
-                    real_name,
-                    extra_data,
-                    download_complete_callback
-                ),
-                daemon=True
-            ).start()
+            # Скачиваем оригинальные изображения + JSON (только для аннотированных датасетов)
+            if not test:
+                extra_data = [
+                    (annotations, 'annotations.json'),
+                    (blazons, 'blazons.json')
+                ]
+                threading.Thread(
+                    target=lambda: download_dataset_with_notification(
+                        self.root,
+                        dataset_folder,
+                        real_name,
+                        extra_data,
+                        download_complete_callback
+                    ),
+                    daemon=True
+                ).start()
             
 
     def _download_annotated_images(self, dataset_folder, real_name, annotations, callback):
@@ -1875,7 +1931,7 @@ class ImageAnnotationApp:
                     
                     # Получаем аннотации для текущего изображения по имени файла
                     image_name = image_path.name
-                    image_annotations = annotations.get(image_name, [])
+                    image_annotations = annotations.get(image_name, []) if annotations is not None else []
                     print(f"Аннотации для изображения {image_name}: {image_annotations}")
                     
                     # Рисуем аннотации на изображении
@@ -1939,6 +1995,48 @@ class ImageAnnotationApp:
             traceback.print_exc()
             callback(False)
 
+    def _download_test_images(self, dataset_folder, real_name, callback):
+        """Скачивает протестированный датасет с изображениями"""
+        try:
+            print("Начинаем скачивание протестированных изображений")
+            print(f"Путь к датасету: {dataset_folder}")
+
+            # Создаем временную директорию
+            temp_dir = Path(tempfile.mkdtemp())
+            output_dir = temp_dir / real_name
+            output_dir.mkdir(parents=True)
+
+            # Копируем изображения
+            for image_path in dataset_folder.glob('*'):
+                if image_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']:
+                    print(f"\nКопирование изображения: {image_path}")
+                    # Просто копируем изображение без изменений
+                    output_path = output_dir / image_path.name
+                    shutil.copy2(image_path, output_path)
+                    print(f"Изображение скопировано: {output_path}")
+
+            # Создаем архив
+            downloads_dir = Path.home() / "Downloads"
+            archive_path = downloads_dir / f"{real_name}_test.zip"
+            print(f"\nСоздание архива: {archive_path}")
+            
+            with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file in output_dir.rglob('*'):
+                    if file.is_file():
+                        zipf.write(file, file.relative_to(output_dir))
+                        print(f"Добавлен в архив: {file}")
+
+            # Удаляем временную директорию
+            shutil.rmtree(temp_dir)
+            print("\nВременная директория удалена")
+            
+            callback(True)
+        except Exception as e:
+            print(f"Ошибка при скачивании протестированных изображений: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            callback(False)
+
     def _show_loading_indicator(self):
         """Показывает индикатор загрузки"""
         self.loading_popup = tk.Toplevel(self.root)
@@ -1974,6 +2072,9 @@ class ImageAnnotationApp:
     def get_tested_datasets(self):
         """Загружает список протестированных датасетов"""
         test_dir = DATA_DIR / "data" / "test"
+        
+        print(f"[DEBUG] Проверяем протестированные датасеты в: {test_dir}")
+        print(f"[DEBUG] Директория существует: {test_dir.exists()}")
 
         # Очищаем предыдущие датасеты
         for dataset in self.tested_datasets:
@@ -1985,10 +2086,19 @@ class ImageAnnotationApp:
             widget.destroy()
 
         if not test_dir.exists():
+            print(f"[DEBUG] Директория {test_dir} не существует")
             return
 
+        print(f"[DEBUG] Найдены протестированные датасеты: {list(test_dir.iterdir())}")
+        
         # Загружаем актуальные данные
         self._setup_tested_datasets_panel()
+
+    def _refresh_tested_datasets_only(self):
+        """Обновляет только панель протестированных датасетов без пересоздания всего UI"""
+        print(f"[DEBUG] Обновляем протестированные датасеты")
+        # Просто вызываем оригинальный метод, так как он уже безопасен
+        self.get_tested_datasets()
 
     def _toggle_dataset_selection(self, dataset, var):
         """Переключает выбор датасета"""
