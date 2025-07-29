@@ -13,7 +13,7 @@
 
 ## Стек технологий
 
-- Python 3.13+
+- Python 3.12+
 - tkinter — графический интерфейс
 - Pillow, OpenCV — работа с изображениями
 - torch, ultralytics — взаимодействие с YOLOv8
