@@ -56,7 +56,7 @@ pip install -r requirements.txt
 Если у вас macos, может потребоваться дополнительная команда:
 
 ```bash
-xattr -d -r com.apple.quarantine ~/Downloads/ImageAnnotation.app
+xattr -d -r com.apple.quarantine ~/Downloads/ImageAnnotationMain.app
 ```
 
 Если скачивание было в папку Загрузки.
